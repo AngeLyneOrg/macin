@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "172820456998",
+    "project_id": "macin-project",
+    "storage_bucket": "macin-project.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:172820456998:android:091e2d3472b343174868e7",
+        "android_client_info": {
+          "package_name": "com.macin.macin"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "172820456998-cjncvh773km71kp5ue2k06gb2p075l4b.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.macin.macin",
+            "certificate_hash": "c2fc231508efe3b64591051b388ef9fa46ed0f9a"
+          }
+        },
+        {
+          "client_id": "172820456998-7er5c2vgf1619p7aoed5jlsjt5qra70j.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCFpVT9WxRw2wURM0sNk4G-zo01kuCIB-k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "172820456998-7er5c2vgf1619p7aoed5jlsjt5qra70j.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
