@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:macin/screens/login_screen.dart';
+import 'package:macin/core/constants/app_theme.dart';
+import 'package:macin/features/onboarding/presentation/pages/onboarding_page.dart';
 import 'firebase_options.dart';
 
 void main() async {
@@ -21,11 +22,9 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Macin Project',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        primarySwatch: Colors.blue,
-      ),
-      home: const LoginScreen(),
+      theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
+      home: const OnboardingPage(),
     );
   }
 }
