@@ -1,0 +1,21 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "macin-project",
+          "appId": "1:172820456998:android:091e2d3472b343174868e7",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "macin-project",
+          "configurations": {
+            "android": "1:172820456998:android:091e2d3472b343174868e7"
+          }
+        }
+      }
+    }
+  }
+}
