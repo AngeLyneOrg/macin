@@ -49,7 +49,7 @@ class UserRepository {
         .limit(AppConstants.notificationsPageSize)
         .snapshots()
         .map((snap) =>
-            snap.docs.map((d) => TransactionModel.fromFirestore(d)).toList());
+        snap.docs.map((d) => TransactionModel.fromFirestore(d)).toList());
   }
 
   /// Écoute les notifications non lues en temps réel.
@@ -63,7 +63,21 @@ class UserRepository {
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snap) =>
-            snap.docs.map((d) => d.data()..['id'] = d.id).toList());
+        snap.docs.map((d) => d.data()..['id'] = d.id).toList());
+  }
+
+  /// Écoute les formateurs mis en avant sur la page d'accueil.
+  ///
+  /// Utilisé dans : [HomePage] section "Top formateurs". Simple
+  /// `where role == instructor` (pas besoin d'index composite). Si tu
+  /// veux trier par nombre d'inscrits ou note moyenne plus tard, il
+  /// faudra dénormaliser ces métriques sur [UserModel] côté instructeur.
+  Stream<List<UserModel>> watchTopInstructors({int limit = 8}) {
+    return _col
+        .where('role', isEqualTo: AppConstants.roleInstructor)
+        .limit(limit)
+        .snapshots()
+        .map((snap) => snap.docs.map((d) => UserModel.fromFirestore(d)).toList());
   }
 
   // ── Futures (pour FutureBuilder / appels ponctuels) ───────
@@ -108,13 +122,13 @@ class UserRepository {
   }) async {
     try {
       await _col.doc(uid).set(UserModel.initialData(
-            uid: uid,
-            displayName: displayName,
-            email: email,
-            referralCode: referralCode,
-            photoUrl: photoUrl,
-            referredBy: referredBy,
-          ));
+        uid: uid,
+        displayName: displayName,
+        email: email,
+        referralCode: referralCode,
+        photoUrl: photoUrl,
+        referredBy: referredBy,
+      ));
     } catch (e) {
       throw DatabaseException(message: 'Erreur création profil : $e');
     }
@@ -122,10 +136,10 @@ class UserRepository {
 
   /// Met à jour les champs modifiables du profil.
   Future<void> updateProfile(
-    String uid, {
-    String? displayName,
-    String? photoUrl,
-  }) async {
+      String uid, {
+        String? displayName,
+        String? photoUrl,
+      }) async {
     try {
       final data = <String, dynamic>{};
       if (displayName != null) data['displayName'] = displayName;

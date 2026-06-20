@@ -1,8 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:macin/core/constants/app_colors.dart';
 import 'package:macin/core/constants/app_dimensions.dart';
 import 'package:macin/core/constants/app_text_styles.dart';
+import 'package:macin/router/app_routes.dart';
 
+/// Page d'onboarding MACIN — première impression avant connexion.
+///
+/// Reprend ton design : fond en couleur primaire, illustration avec
+/// badges de compétences flottants, container blanc arrondi en bas
+/// avec titre/description/CTA. Le bouton "Get Started" navigue
+/// maintenant vers [AppRoutes.login] (avant : aucune action).
 class OnboardingPage extends StatelessWidget {
   const OnboardingPage({super.key});
 
@@ -10,21 +18,13 @@ class OnboardingPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        // Fond de la page (visible derrière l'image)
         color: AppColors.primary,
         child: SafeArea(
           maintainBottomViewPadding: false,
           child: Column(
             children: [
-              // Logo en haut
               _buildMacinLogo(),
-
-              // Espace flexible pour pousser le contenu vers le bas
-              const Expanded(
-                child: SizedBox(),
-              ),
-
-              // Contenu aligné en bas
+              const Expanded(child: SizedBox()),
               _buildBottomContent(context),
             ],
           ),
@@ -42,10 +42,7 @@ class OnboardingPage extends StatelessWidget {
         fit: BoxFit.contain,
         errorBuilder: (_, __, ___) => Text(
           'MACIN',
-          // ✅ Utilisation d'AppTextStyles au lieu de TextStyle direct
-          style: AppTextStyles.display1.copyWith(
-            color: Colors.white,
-          ),
+          style: AppTextStyles.display1.copyWith(color: Colors.white),
         ),
       ),
     );
@@ -56,10 +53,7 @@ class OnboardingPage extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Illustration avec les badges
         _buildIllustration(context),
-
-        // Container blanc avec le texte et le bouton
         Container(
           decoration: const BoxDecoration(
             color: Colors.white,
@@ -81,7 +75,7 @@ class OnboardingPage extends StatelessWidget {
                 const SizedBox(height: AppDimensions.sm),
                 _buildDescription(),
                 const SizedBox(height: AppDimensions.xl),
-                _buildGetStartedButton(),
+                _buildGetStartedButton(context),
                 const SizedBox(height: AppDimensions.lg),
               ],
             ),
@@ -99,7 +93,6 @@ class OnboardingPage extends StatelessWidget {
       clipBehavior: Clip.none,
       alignment: Alignment.center,
       children: [
-        // Image de la personne
         Image.asset(
           'assets/images/onboarding_character2.png',
           height: MediaQuery.of(context).size.height * 0.45,
@@ -110,8 +103,6 @@ class OnboardingPage extends StatelessWidget {
             color: Colors.white.withOpacity(0.3),
           ),
         ),
-
-        // ── Badge 1 : Development (incliné -30°) ────────
         Positioned(
           top: -20,
           left: screenWidth * 0.05,
@@ -124,8 +115,6 @@ class OnboardingPage extends StatelessWidget {
             ),
           ),
         ),
-
-        // ── Badge 2 : UX/UI Design (incliné +25°) ───────
         Positioned(
           top: -10,
           right: screenWidth * 0.05,
@@ -138,8 +127,6 @@ class OnboardingPage extends StatelessWidget {
             ),
           ),
         ),
-
-        // ── Badge 3 : Graphic Design (incliné -35°) ─────
         Positioned(
           top: 50,
           left: screenWidth * 0.0,
@@ -152,8 +139,6 @@ class OnboardingPage extends StatelessWidget {
             ),
           ),
         ),
-
-        // ── Badge 4 : Networking (incliné +40°) ─────────
         Positioned(
           top: 60,
           right: screenWidth * 0.0,
@@ -183,7 +168,6 @@ class OnboardingPage extends StatelessWidget {
       ),
       decoration: BoxDecoration(
         color: Colors.white,
-        // color: Color(0xFF6399FC),
         borderRadius: BorderRadius.circular(AppDimensions.radiusRound),
         boxShadow: const [
           BoxShadow(
@@ -192,26 +176,17 @@ class OnboardingPage extends StatelessWidget {
             offset: Offset(0, 2),
           ),
         ],
-        border: Border.all(
-          color: color.withOpacity(0.3),
-          width: 1.5,
-        ),
+        border: Border.all(color: color.withOpacity(0.3), width: 1.5),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            icon,
-            size: AppDimensions.iconMd,
-            color: color,
-          ),
+          Icon(icon, size: AppDimensions.iconMd, color: color),
           const SizedBox(width: AppDimensions.xs),
           Text(
             label,
-            // ✅ Utilisation d'AppTextStyles
             style: AppTextStyles.labelMedium.copyWith(
               color: AppColors.textPrimary,
-              // color: Colors.white,
             ),
           ),
         ],
@@ -223,7 +198,6 @@ class OnboardingPage extends StatelessWidget {
   Widget _buildTitle() {
     return Text(
       "LET'S LEARN WITH OUR\nEXCITING COURSE",
-      // ✅ Utilisation d'AppTextStyles au lieu de TextStyle direct
       style: AppTextStyles.heading1.copyWith(
         fontSize: 30,
         letterSpacing: -0.3,
@@ -237,7 +211,6 @@ class OnboardingPage extends StatelessWidget {
   Widget _buildDescription() {
     return Text(
       'Excited to join your journey, making learning easy and\nfun as we reach goals together.',
-      // ✅ Utilisation d'AppTextStyles (déjà configuré)
       style: AppTextStyles.body2.copyWith(
         color: AppColors.textSecondary,
         height: 1.6,
@@ -247,15 +220,12 @@ class OnboardingPage extends StatelessWidget {
   }
 
   // ── Bouton Get Started ──────────────────────────────────
-  Widget _buildGetStartedButton() {
+  Widget _buildGetStartedButton(BuildContext context) {
     return SizedBox(
       width: double.infinity,
       height: AppDimensions.buttonHeight,
       child: ElevatedButton(
-        onPressed: () {
-          // Navigation vers la page d'accueil
-          // context.go('/home');
-        },
+        onPressed: () => context.goNamed(AppRoutes.login),
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
@@ -263,13 +233,8 @@ class OnboardingPage extends StatelessWidget {
             borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
           ),
           elevation: 0,
-          // ✅ Le textStyle est déjà défini dans le thème (AppTextStyles.button)
         ),
-        child: Text(
-          'Get Started',
-          // ✅ Utilisation d'AppTextStyles pour le bouton
-          style: AppTextStyles.button,
-        ),
+        child: Text('Get Started', style: AppTextStyles.button),
       ),
     );
   }

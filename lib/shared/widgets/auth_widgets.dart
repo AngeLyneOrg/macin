@@ -46,20 +46,34 @@ class MacinLogo extends StatelessWidget {
           width: size,
           height: size,
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [AppColors.primary, AppColors.primaryDark],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
+            // gradient: const LinearGradient(
+            //   colors: [AppColors.primary, AppColors.primaryDark],
+            //   begin: Alignment.topLeft,
+            //   end: Alignment.bottomRight,
+            // ),
+            color: Colors.white,
             borderRadius: BorderRadius.circular(size * 0.28),
           ),
-          child: Center(
-            child: Text(
-              'M',
-              style: AppTextStyles.display1.copyWith(
-                color: Colors.white,
-                fontSize: size * 0.5,
-              ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(size * 0.28),
+            child: Image.asset(
+              "assets/icons/macin_icon_colored.png",
+              height: size,
+              width: size,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                // Fallback : affiche la lettre 'M' stylée si l'image n'existe pas
+                return Center(
+                  child: Text(
+                    'M',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: size * 0.5,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                );
+              },
             ),
           ),
         ),

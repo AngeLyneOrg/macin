@@ -39,7 +39,7 @@ class CourseRepository {
 
     return query.snapshots().map(
           (snap) => snap.docs.map((d) => CourseModel.fromFirestore(d)).toList(),
-        );
+    );
   }
 
   /// Écoute les cours d'un formateur spécifique.
@@ -51,7 +51,7 @@ class CourseRepository {
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snap) =>
-            snap.docs.map((d) => CourseModel.fromFirestore(d)).toList());
+        snap.docs.map((d) => CourseModel.fromFirestore(d)).toList());
   }
 
   /// Écoute les modules d'un cours en temps réel.
@@ -65,7 +65,7 @@ class CourseRepository {
         .orderBy('order')
         .snapshots()
         .map((snap) =>
-            snap.docs.map((d) => ModuleModel.fromFirestore(d)).toList());
+        snap.docs.map((d) => ModuleModel.fromFirestore(d)).toList());
   }
 
   /// Écoute les leçons d'un module.
@@ -78,7 +78,19 @@ class CourseRepository {
         .orderBy('order')
         .snapshots()
         .map((snap) =>
-            snap.docs.map((d) => LessonModel.fromFirestore(d)).toList());
+        snap.docs.map((d) => LessonModel.fromFirestore(d)).toList());
+  }
+
+  /// Écoute un cours spécifique en temps réel.
+  ///
+  /// Utilisé dans : [CourseDetailPage] — un changement de prix, de
+  /// nombre de leçons, etc. fait par le formateur se reflète aussitôt,
+  /// sans pull-to-refresh.
+  Stream<CourseModel?> watchCourse(String courseId) {
+    return _courses.doc(courseId).snapshots().map((doc) {
+      if (!doc.exists) return null;
+      return CourseModel.fromFirestore(doc);
+    });
   }
 
   // ── Futures ───────────────────────────────────────────────
@@ -195,7 +207,7 @@ class ProgressRepository {
         .where('userId', isEqualTo: userId)
         .snapshots()
         .map((snap) =>
-            snap.docs.map((d) => UserProgressModel.fromFirestore(d)).toList());
+        snap.docs.map((d) => UserProgressModel.fromFirestore(d)).toList());
   }
 
   // ── Futures / Mutations ───────────────────────────────────

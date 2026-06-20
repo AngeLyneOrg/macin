@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:macin/core/constants/app_colors.dart';
 import 'package:macin/core/constants/app_constants.dart';
 import 'package:macin/core/constants/app_dimensions.dart';
 import 'package:macin/core/constants/app_text_styles.dart';
@@ -14,12 +15,8 @@ import 'package:macin/shared/widgets/buttons/social_auth_button.dart';
 import 'package:macin/shared/widgets/inputs/macin_text_field.dart';
 import 'package:macin/shared/widgets/role_selector.dart';
 
-/// Page d'inscription MACIN.
-///
-/// Le rôle choisi via [RoleSelector] ('student' | 'instructor') est
-/// transmis à [AuthRepository], qui l'écrit dans Firestore lors de
-/// la création du profil. Le code de parrainage, s'il est saisi,
-/// est résolu côté repository.
+/// Page d'inscription MACIN — même langage visuel que [LoginPage]
+/// et [OnboardingPage] : fond primaire, container blanc arrondi en bas.
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
 
@@ -104,131 +101,170 @@ class _RegisterPageState extends State<RegisterPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded),
-          onPressed: () => context.pop(),
-        ),
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppDimensions.pagePaddingH,
-          ),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text('Créer un compte', style: AppTextStyles.heading1),
-                const SizedBox(height: AppDimensions.xs),
-                Text(
-                  'Rejoins MACIN et commence à apprendre.',
-                  style: AppTextStyles.body2,
+      body: Container(
+        color: AppColors.primary,
+        child: SafeArea(
+          maintainBottomViewPadding: false,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppDimensions.sm,
                 ),
-                const SizedBox(height: AppDimensions.xl),
-
-                // ── Choix du rôle ──────────────────────────
-                Text('Tu es...', style: AppTextStyles.body1Medium),
-                const SizedBox(height: AppDimensions.sm),
-                RoleSelector(
-                  selectedRole: _selectedRole,
-                  onChanged: (role) => setState(() => _selectedRole = role),
-                ),
-                const SizedBox(height: AppDimensions.xl),
-
-                // ── Nom complet ────────────────────────────
-                MacinTextField(
-                  label: 'Nom complet',
-                  hint: 'Jean Dupont',
-                  controller: _nameController,
-                  prefixIcon: Icons.person_outline_rounded,
-                  validator: (v) => (v == null || v.trim().length < 2)
-                      ? 'Entre ton nom complet'
-                      : null,
-                ),
-                const SizedBox(height: AppDimensions.base),
-
-                // ── Email ──────────────────────────────────
-                MacinTextField(
-                  label: 'Email',
-                  hint: 'toi@exemple.com',
-                  controller: _emailController,
-                  prefixIcon: Icons.mail_outline_rounded,
-                  keyboardType: TextInputType.emailAddress,
-                  validator: (v) => (v == null || !v.isValidEmail)
-                      ? 'Entre une adresse email valide'
-                      : null,
-                ),
-                const SizedBox(height: AppDimensions.base),
-
-                // ── Mot de passe ───────────────────────────
-                MacinTextField(
-                  label: 'Mot de passe',
-                  hint: '6 caractères minimum',
-                  controller: _passwordController,
-                  isPassword: true,
-                  prefixIcon: Icons.lock_outline_rounded,
-                  validator: (v) => (v == null || !v.isValidPassword)
-                      ? '6 caractères minimum'
-                      : null,
-                ),
-                const SizedBox(height: AppDimensions.base),
-
-                // ── Code de parrainage (optionnel) ─────────
-                MacinTextField(
-                  label: 'Code de parrainage (optionnel)',
-                  hint: 'EX: MAC4-K9RZ',
-                  controller: _referralController,
-                  prefixIcon: Icons.card_giftcard_rounded,
-                  textInputAction: TextInputAction.done,
-                  validator: (v) {
-                    if (v == null || v.trim().isEmpty) return null;
-                    final normalized = ReferralUtils.normalizeCode(v);
-                    return ReferralUtils.isValidFormat(normalized)
-                        ? null
-                        : 'Format attendu : XXXX-XXXX';
-                  },
-                ),
-                const SizedBox(height: AppDimensions.xl),
-
-                MacinPrimaryButton(
-                  label: 'Créer mon compte',
-                  isLoading: _isEmailLoading,
-                  onPressed: _handleEmailRegister,
-                ),
-
-                const SizedBox(height: AppDimensions.xl),
-                const AuthDivider(),
-                const SizedBox(height: AppDimensions.xl),
-
-                SocialAuthButton(
-                  provider: SocialProvider.google,
-                  isLoading: _loadingProvider == SocialProvider.google,
-                  onPressed: _handleGoogleSignUp,
-                ),
-                const SizedBox(height: AppDimensions.md),
-                SocialAuthButton(
-                  provider: SocialProvider.github,
-                  isLoading: _loadingProvider == SocialProvider.github,
-                  onPressed: _handleGitHubSignUp,
-                ),
-
-                const SizedBox(height: AppDimensions.xl),
-
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                child: Row(
                   children: [
-                    Text('Déjà un compte ?', style: AppTextStyles.body2),
-                    TextButton(
-                      onPressed: () => context.pop(),
-                      child: const Text('Se connecter'),
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                          color: Colors.white),
+                      onPressed: () => context.canPop()
+                          ? context.pop()
+                          : context.goNamed(AppRoutes.login),
                     ),
                   ],
                 ),
-                const SizedBox(height: AppDimensions.base),
-              ],
-            ),
+              ),
+              const SizedBox(height: AppDimensions.sm),
+              const MacinLogo(size: 56),
+              const SizedBox(height: AppDimensions.lg),
+
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(AppDimensions.radiusXl * 1.5),
+                      topRight: Radius.circular(AppDimensions.radiusXl * 1.5),
+                    ),
+                  ),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppDimensions.pagePaddingH,
+                      vertical: AppDimensions.pagePaddingV,
+                    ),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('Créer un compte',
+                              style: AppTextStyles.heading1),
+                          const SizedBox(height: AppDimensions.xs),
+                          Text(
+                            'Rejoins MACIN et commence à apprendre.',
+                            style: AppTextStyles.body2,
+                          ),
+                          const SizedBox(height: AppDimensions.xl),
+
+                          Text('Tu es...', style: AppTextStyles.body1Medium),
+                          const SizedBox(height: AppDimensions.sm),
+                          RoleSelector(
+                            selectedRole: _selectedRole,
+                            onChanged: (role) =>
+                                setState(() => _selectedRole = role),
+                          ),
+                          const SizedBox(height: AppDimensions.xl),
+
+                          MacinTextField(
+                            label: 'Nom complet',
+                            hint: 'Jean Dupont',
+                            controller: _nameController,
+                            prefixIcon: Icons.person_outline_rounded,
+                            validator: (v) =>
+                            (v == null || v.trim().length < 2)
+                                ? 'Entre ton nom complet'
+                                : null,
+                          ),
+                          const SizedBox(height: AppDimensions.base),
+
+                          MacinTextField(
+                            label: 'Email',
+                            hint: 'toi@exemple.com',
+                            controller: _emailController,
+                            prefixIcon: Icons.mail_outline_rounded,
+                            keyboardType: TextInputType.emailAddress,
+                            validator: (v) => (v == null || !v.isValidEmail)
+                                ? 'Entre une adresse email valide'
+                                : null,
+                          ),
+                          const SizedBox(height: AppDimensions.base),
+
+                          MacinTextField(
+                            label: 'Mot de passe',
+                            hint: '6 caractères minimum',
+                            controller: _passwordController,
+                            isPassword: true,
+                            prefixIcon: Icons.lock_outline_rounded,
+                            validator: (v) =>
+                            (v == null || !v.isValidPassword)
+                                ? '6 caractères minimum'
+                                : null,
+                          ),
+                          const SizedBox(height: AppDimensions.base),
+
+                          MacinTextField(
+                            label: 'Code de parrainage (optionnel)',
+                            hint: 'EX: MAC4-K9RZ',
+                            controller: _referralController,
+                            prefixIcon: Icons.card_giftcard_rounded,
+                            textInputAction: TextInputAction.done,
+                            validator: (v) {
+                              if (v == null || v.trim().isEmpty) return null;
+                              final normalized =
+                              ReferralUtils.normalizeCode(v);
+                              return ReferralUtils.isValidFormat(normalized)
+                                  ? null
+                                  : 'Format attendu : XXXX-XXXX';
+                            },
+                          ),
+                          const SizedBox(height: AppDimensions.xl),
+
+                          MacinPrimaryButton(
+                            label: 'Créer mon compte',
+                            isLoading: _isEmailLoading,
+                            onPressed: _handleEmailRegister,
+                          ),
+
+                          const SizedBox(height: AppDimensions.xl),
+                          const AuthDivider(),
+                          const SizedBox(height: AppDimensions.xl),
+
+                          SocialAuthButton(
+                            provider: SocialProvider.google,
+                            isLoading:
+                            _loadingProvider == SocialProvider.google,
+                            onPressed: _handleGoogleSignUp,
+                          ),
+                          const SizedBox(height: AppDimensions.md),
+                          SocialAuthButton(
+                            provider: SocialProvider.github,
+                            isLoading:
+                            _loadingProvider == SocialProvider.github,
+                            onPressed: _handleGitHubSignUp,
+                          ),
+
+                          const SizedBox(height: AppDimensions.xl),
+
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text('Déjà un compte ?',
+                                  style: AppTextStyles.body2),
+                              TextButton(
+                                onPressed: () => context.pop(),
+                                child: const Text('Se connecter'),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: AppDimensions.base),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

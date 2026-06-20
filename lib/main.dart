@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:macin/features/auth/presentation/pages/login_page.dart';
+import 'package:macin/features/auth/presentation/pages/register_page.dart';
 import 'package:macin/shared/services/local_auth_cache.dart';
 import 'core/constants/app_theme.dart';
 import 'router/app_router.dart';
@@ -55,5 +57,16 @@ class MacinApp extends StatelessWidget {
       // ── Navigation ────────────────────────────────────────
       routerConfig: AppRouter.router,
     );
+
+    // return MaterialApp(
+    //   title: 'MACIN',
+    //   debugShowCheckedModeBanner: true,
+    //
+    //   // ── Thème ─────────────────────────────────────────────
+    //   theme: AppTheme.light(),
+    //   darkTheme: AppTheme.dark(),
+    //   themeMode: ThemeMode.system,
+    //   home: RegisterPage(),
+    // );
   }
 }
