@@ -94,7 +94,7 @@ class OnboardingPage extends StatelessWidget {
       alignment: Alignment.center,
       children: [
         Image.asset(
-          'assets/images/onboarding_character2.png',
+          'assets/images/onboarding_character3.png',
           height: MediaQuery.of(context).size.height * 0.45,
           fit: BoxFit.contain,
           errorBuilder: (_, __, ___) => Icon(

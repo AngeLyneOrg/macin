@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:macin/features/auth/presentation/pages/login_page.dart';
+import 'package:macin/features/ai_tutor/presentation/pages/ai_tutor_page.dart';
 import 'package:macin/features/auth/presentation/pages/register_page.dart';
+import 'package:macin/features/profile/presentation/pages/profile_page.dart';
+import 'package:macin/features/wallet/presentation/pages/wallet_page.dart';
 import 'package:macin/shared/services/local_auth_cache.dart';
 import 'core/constants/app_theme.dart';
 import 'router/app_router.dart';
@@ -45,28 +47,28 @@ class MacinApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp.router(
-      title: 'MACIN',
-      debugShowCheckedModeBanner: false,
-
-      // ── Thème ─────────────────────────────────────────────
-      theme: AppTheme.light(),
-      darkTheme: AppTheme.dark(),
-      themeMode: ThemeMode.system,
-
-      // ── Navigation ────────────────────────────────────────
-      routerConfig: AppRouter.router,
-    );
-
-    // return MaterialApp(
+    // return MaterialApp.router(
     //   title: 'MACIN',
-    //   debugShowCheckedModeBanner: true,
+    //   debugShowCheckedModeBanner: false,
     //
     //   // ── Thème ─────────────────────────────────────────────
     //   theme: AppTheme.light(),
     //   darkTheme: AppTheme.dark(),
     //   themeMode: ThemeMode.system,
-    //   home: RegisterPage(),
+    //
+    //   // ── Navigation ────────────────────────────────────────
+    //   routerConfig: AppRouter.router,
     // );
+
+    return MaterialApp(
+      title: 'MACIN',
+      debugShowCheckedModeBanner: true,
+
+      // ── Thème ─────────────────────────────────────────────
+      theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
+      themeMode: ThemeMode.system,
+      home: WalletPage(),
+    );
   }
 }
