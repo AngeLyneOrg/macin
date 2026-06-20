@@ -60,10 +60,46 @@ class UserModel extends Equatable {
       referredBy: data['referredBy'] as String?,
       badgeIds: List<String>.from(data['badgeIds'] as List? ?? []),
       enrolledCourseIds:
-          List<String>.from(data['enrolledCourseIds'] as List? ?? []),
+      List<String>.from(data['enrolledCourseIds'] as List? ?? []),
       learningProfile:
-          Map<String, dynamic>.from(data['learningProfile'] as Map? ?? {}),
+      Map<String, dynamic>.from(data['learningProfile'] as Map? ?? {}),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+    );
+  }
+
+  /// Reconstruit un [UserModel] depuis une Map issue du cache local (Hive),
+  /// par opposition à [fromFirestore] qui prend un `DocumentSnapshot`.
+  ///
+  /// Le champ `createdAt` peut être un [Timestamp] (s'il vient directement
+  /// de `toMap()`) — on gère ce cas pour rester robuste.
+  factory UserModel.fromCachedMap(String uid, Map<String, dynamic> data) {
+    DateTime created;
+    final rawCreatedAt = data['createdAt'];
+    if (rawCreatedAt is Timestamp) {
+      created = rawCreatedAt.toDate();
+    } else if (rawCreatedAt is int) {
+      created = DateTime.fromMillisecondsSinceEpoch(rawCreatedAt);
+    } else {
+      created = DateTime.now();
+    }
+
+    return UserModel(
+      uid: uid,
+      displayName: data['displayName'] as String? ?? '',
+      email: data['email'] as String? ?? '',
+      photoUrl: data['photoUrl'] as String?,
+      role: data['role'] as String? ?? 'student',
+      level: data['level'] as int? ?? 1,
+      xp: data['xp'] as int? ?? 0,
+      walletBalance: (data['walletBalance'] as num?)?.toDouble() ?? 0.0,
+      referralCode: data['referralCode'] as String? ?? '',
+      referredBy: data['referredBy'] as String?,
+      badgeIds: List<String>.from(data['badgeIds'] as List? ?? []),
+      enrolledCourseIds:
+      List<String>.from(data['enrolledCourseIds'] as List? ?? []),
+      learningProfile:
+      Map<String, dynamic>.from(data['learningProfile'] as Map? ?? {}),
+      createdAt: created,
     );
   }
 
@@ -120,8 +156,8 @@ class UserModel extends Equatable {
   bool get isStudent => role == 'student';
   bool get isInstructor => role == 'instructor';
   bool get isAdmin => role == 'admin';
-  bool get isEnrolledIn(String courseId) => enrolledCourseIds.contains(courseId);
-  bool get hasBadge(String badgeId) => badgeIds.contains(badgeId);
+  bool isEnrolledIn(String courseId) => enrolledCourseIds.contains(courseId);
+  bool hasBadge(String badgeId) => badgeIds.contains(badgeId);
   String get initials {
     final parts = displayName.trim().split(' ');
     if (parts.isEmpty) return '?';
@@ -162,8 +198,8 @@ class UserModel extends Equatable {
 
   @override
   List<Object?> get props => [
-        uid, displayName, email, photoUrl, role,
-        level, xp, walletBalance, referralCode, referredBy,
-        badgeIds, enrolledCourseIds, learningProfile, createdAt,
-      ];
+    uid, displayName, email, photoUrl, role,
+    level, xp, walletBalance, referralCode, referredBy,
+    badgeIds, enrolledCourseIds, learningProfile, createdAt,
+  ];
 }

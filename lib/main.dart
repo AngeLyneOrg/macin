@@ -1,30 +1,59 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:macin/core/constants/app_theme.dart';
-import 'package:macin/features/onboarding/presentation/pages/onboarding_page.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:macin/shared/services/local_auth_cache.dart';
+import 'core/constants/app_theme.dart';
+import 'router/app_router.dart';
 import 'firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Orientation portrait uniquement (application mobile)
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
+
+  // Couleur de la status bar
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+    ),
+  );
+
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  runApp(const MyApp());
+  await Hive.initFlutter();
+  await LocalAuthCache.init();
+
+  runApp(const MacinApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+/// Widget racine de l'application MACIN.
+///
+/// Ce widget est le seul à connaître le [AppRouter] et le [AppTheme].
+/// Toutes les autres pages reçoivent le thème via le contexte.
+class MacinApp extends StatelessWidget {
+  const MacinApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Macin Project',
+    return MaterialApp.router(
+      title: 'MACIN',
       debugShowCheckedModeBanner: false,
+
+      // ── Thème ─────────────────────────────────────────────
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
-      home: const OnboardingPage(),
+      themeMode: ThemeMode.system,
+
+      // ── Navigation ────────────────────────────────────────
+      routerConfig: AppRouter.router,
     );
   }
 }

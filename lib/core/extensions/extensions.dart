@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../constants/app_colors.dart';
-import '../constants/app_text_styles.dart';
+import 'package:macin/core/constants/app_colors.dart';
+import 'package:macin/core/constants/app_text_styles.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // BuildContext extensions
@@ -20,7 +20,7 @@ extension ContextX on BuildContext {
   bool get isSmallScreen => screenWidth < 360;
 
   // Navigation
-  void pop<T>([T? result]) => Navigator.of(this).pop(result);
+  // void pop<T>([T? result]) => Navigator.of(this).pop(result);
 
   // SnackBar helpers
   void showSuccessSnack(String message) {

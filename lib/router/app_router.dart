@@ -1,30 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:macin/features/ai_tutor/presentation/pages/ai_tutor_page.dart';
+import 'package:macin/features/auth/presentation/pages/login_page.dart';
+import 'package:macin/features/auth/presentation/pages/register_page.dart';
+import 'package:macin/features/auth/presentation/pages/splash_page.dart';
+import 'package:macin/features/courses/presentation/pages/catalog_page.dart';
+import 'package:macin/features/courses/presentation/pages/course_detail_page.dart';
+import 'package:macin/features/home/presentation/pages/home_page.dart';
+import 'package:macin/features/lessons/presentation/pages/lesson_player_page.dart';
+import 'package:macin/features/onboarding/presentation/pages/onboarding_page.dart';
+import 'package:macin/features/profile/presentation/pages/profile_page.dart';
+import 'package:macin/features/wallet/presentation/pages/wallet_page.dart';
 import 'package:macin/shared/widgets/main_scaffold.dart';
 
 import 'app_routes.dart';
-
-// ── Pages placeholders (seront remplacées au fil des issues) ──
-// Auth
-// import '../features/auth/presentation/pages/splash_page.dart';
-// import '../features/auth/presentation/pages/login_page.dart';
-// import '../features/auth/presentation/pages/register_page.dart';
-// Shell
-
-// Home
-// import '../features/home/presentation/pages/home_page.dart';
-// Courses
-// import '../features/courses/presentation/pages/catalog_page.dart';
-// import '../features/courses/presentation/pages/course_detail_page.dart';
-// Lessons
-// import '../features/lessons/presentation/pages/lesson_player_page.dart';
-// Profile
-// import '../features/profile/presentation/pages/profile_page.dart';
-// Wallet
-// import '../features/wallet/presentation/pages/wallet_page.dart';
-// AI Tutor
-// import '../features/ai_tutor/presentation/pages/ai_tutor_page.dart';
 
 /// Configuration go_router de l'application MACIN.
 ///
@@ -66,23 +56,30 @@ class AppRouter {
 
         routes: [
           // ── Splash ─────────────────────────────────────────
-          // GoRoute(
-          //   path: '/splash',
-          //   name: AppRoutes.splash,
-          //   builder: (context, state) => const SplashPage(),
-          // ),
-          //
-          // // ── Auth ───────────────────────────────────────────
-          // GoRoute(
-          //   path: '/login',
-          //   name: AppRoutes.login,
-          //   builder: (context, state) => const LoginPage(),
-          // ),
-          // GoRoute(
-          //   path: '/register',
-          //   name: AppRoutes.register,
-          //   builder: (context, state) => const RegisterPage(),
-          // ),
+          GoRoute(
+            path: '/splash',
+            name: AppRoutes.splash,
+            builder: (context, state) => const SplashPage(),
+          ),
+
+          // ── Onboarding (premier contact, app non authentifiée) ──
+          GoRoute(
+            path: '/onboarding',
+            name: AppRoutes.onboarding,
+            builder: (context, state) => const OnboardingPage(),
+          ),
+
+          // ── Auth ───────────────────────────────────────────
+          GoRoute(
+            path: '/login',
+            name: AppRoutes.login,
+            builder: (context, state) => const LoginPage(),
+          ),
+          GoRoute(
+            path: '/register',
+            name: AppRoutes.register,
+            builder: (context, state) => const RegisterPage(),
+          ),
 
           // ── Shell avec BottomNavigationBar ─────────────────
           ShellRoute(
@@ -120,21 +117,21 @@ class AppRouter {
                   ),
                 ],
               ),
-              // GoRoute(
-              //   path: '/profile',
-              //   name: AppRoutes.profile,
-              //   builder: (context, state) => const ProfilePage(),
-              // ),
-              // GoRoute(
-              //   path: '/wallet',
-              //   name: AppRoutes.wallet,
-              //   builder: (context, state) => const WalletPage(),
-              // ),
-              // GoRoute(
-              //   path: '/ai-tutor',
-              //   name: AppRoutes.aiTutor,
-              //   builder: (context, state) => const AiTutorPage(),
-              // ),
+              GoRoute(
+                path: '/profile',
+                name: AppRoutes.profile,
+                builder: (context, state) => const ProfilePage(),
+              ),
+              GoRoute(
+                path: '/wallet',
+                name: AppRoutes.wallet,
+                builder: (context, state) => const WalletPage(),
+              ),
+              GoRoute(
+                path: '/ai-tutor',
+                name: AppRoutes.aiTutor,
+                builder: (context, state) => const AiTutorPage(),
+              ),
             ],
           ),
         ],

@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:macin/core/constants/app_colors.dart';
+import 'package:macin/core/constants/app_dimensions.dart';
+import 'package:macin/router/app_routes.dart';
 
-import '../../core/constants/app_colors.dart';
-import '../../core/constants/app_dimensions.dart';
-import '../../router/app_routes.dart';
+
 
 /// Scaffold principal de MACIN avec BottomNavigationBar.
 ///

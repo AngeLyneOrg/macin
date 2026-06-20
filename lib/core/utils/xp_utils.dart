@@ -1,4 +1,6 @@
-import '../constants/app_constants.dart';
+
+
+import 'package:macin/core/constants/app_constants.dart' show AppConstants;
 
 /// Utilitaires pour le système de progression XP / niveaux de MACIN.
 ///

@@ -1,11 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:macin/core/constants/app_constants.dart';
+import 'package:macin/core/errors/app_exceptions.dart';
+import 'package:macin/shared/models/course_model.dart';
+import 'package:macin/shared/models/exercise_model.dart';
+import 'package:macin/shared/models/lesson_model.dart';
+import 'package:macin/shared/models/models.dart';
 
-import '../models/course_model.dart';
-import '../models/lesson_model.dart';
-import '../models/exercise_model.dart';
-import '../models/models.dart';
-import '../../core/constants/app_constants.dart';
-import '../../core/errors/app_exceptions.dart';
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CourseRepository

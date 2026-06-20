@@ -53,9 +53,13 @@ dependencies:
 flutter_launcher_icons:
   image_path: "assets/icons/macin_icon_white.png"
   adaptive_icon_background: "#003BFF"
-  #  adaptive_icon_background: "#FFFFFF"
   adaptive_icon_foreground: "assets/icons/macin_icon_white.png"
   adaptive_icon_monochrome: "assets/icons/macin_icon_monochrome.png"
+
+#  image_path: "assets/icons/aurea_icon_colored.png"
+#  adaptive_icon_background: "#FFFFFF"
+#  adaptive_icon_foreground: "assets/icons/aurea_icon_colored.png"
+#  adaptive_icon_monochrome: "assets/icons/aurea_icon_monochrome.png"
 
   android: true
 
