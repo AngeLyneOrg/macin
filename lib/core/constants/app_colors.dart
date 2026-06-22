@@ -5,11 +5,11 @@ import 'package:flutter/material.dart';
 /// Toute l'application référence ces constantes — jamais de
 /// couleur codée en dur dans les widgets.
 abstract class AppColors {
-  // ── Primaire (Bleu MACIN) ────────────────────────────────
-  static const Color primary = Color(0xFF1A6BFF);
-  static const Color primaryLight = Color(0xFF5C96FF);
-  static const Color primaryDark = Color(0xFF0047CC);
-  static const Color primarySurface = Color(0xFFE8F0FF); // fond cards primaire
+  // ── Primaire (Bleu MACIN - Mis à jour) ────────────────────
+  static const Color primary = Color(0xFF013BFF); // Ta nouvelle couleur de base
+  static const Color primaryLight = Color(0xFF547BFF); // Plus clair pour les états survolés/actifs
+  static const Color primaryDark = Color(0xFF0029B3); // Plus sombre pour le relief
+  static const Color primarySurface = Color(0xFFE6ECFF); // Fond léger (cards/alertes) basé sur le nouveau bleu
 
   // ── Secondaire (Violet — gamification / badges) ──────────
   static const Color secondary = Color(0xFF7C3AED);
@@ -54,7 +54,7 @@ abstract class AppColors {
 
   // ── Raretés des badges ───────────────────────────────────
   static const Color rarityCommon = Color(0xFF64748B);
-  static const Color rarityRare = Color(0xFF2563EB);
+  static const Color rarityRare = Color(0xFF2563EB); // Ce bleu reste cohérent avec ton nouveau thème
   static const Color rarityEpic = Color(0xFF7C3AED);
   static const Color rarityLegendary = Color(0xFFD97706);
 

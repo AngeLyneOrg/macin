@@ -1,4 +1,4 @@
-import '../models/models.dart';
+import 'models.dart';
 
 /// Combine un [ReferralModel] avec les infos d'affichage du filleul
 /// (nom, avatar) pour la liste de parrainage dans [WalletPage].
