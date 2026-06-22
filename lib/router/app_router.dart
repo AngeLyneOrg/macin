@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-import 'package:macin/features/ai_tutor/presentation/pages/ai_tutor_page.dart';
+import 'package:macin/features/ai_tutor/presentation/pages/ai_dashboard_page.dart';
+import 'package:macin/features/ai_tutor/presentation/pages/ai_chat_page.dart';
 import 'package:macin/features/auth/presentation/pages/login_page.dart';
 import 'package:macin/features/auth/presentation/pages/register_page.dart';
 import 'package:macin/features/auth/presentation/pages/splash_page.dart';
@@ -95,6 +96,13 @@ class AppRouter {
         builder: (context, state) => const RegisterPage(),
       ),
 
+      // ── AI Chat (MACI) — hors du Shell, écran plein sans bottom nav ──
+      GoRoute(
+        path: '/ai-chat',
+        name: AppRoutes.aiChat,
+        builder: (context, state) => const AiChatPage(),
+      ),
+
       // ── Shell avec BottomNavigationBar ─────────────────
       ShellRoute(
         navigatorKey: _shellNavigatorKey,
@@ -144,7 +152,7 @@ class AppRouter {
           GoRoute(
             path: '/ai-tutor',
             name: AppRoutes.aiTutor,
-            builder: (context, state) => const AiTutorPage(),
+            builder: (context, state) => const AiDashboardPage(),
           ),
         ],
       ),

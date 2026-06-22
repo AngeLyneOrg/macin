@@ -41,8 +41,9 @@ abstract class AppRoutes {
   static const String badges = 'badges';
   static const String leaderboard = 'leaderboard';
 
-  // ── AI Tutor ─────────────────────────────────────────────
-  static const String aiTutor = 'ai-tutor';
+  // ── AI Tutor (MACI) ──────────────────────────────────────
+  static const String aiTutor = 'ai-tutor';      // Dashboard d'analyse IA
+  static const String aiChat = 'ai-chat';        // Chat libre avec MACI
 
   // ── Wallet & Referral ────────────────────────────────────
   static const String wallet = 'wallet';
