@@ -11,17 +11,19 @@ import 'package:macin/shared/models/user_model.dart';
 import 'package:macin/shared/repositories/repositories.dart';
 import 'package:macin/shared/repositories/user_repository.dart';
 import 'package:macin/shared/services/local_auth_cache.dart';
+import 'package:macin/shared/widgets/backgrounds/aurora_backdrop.dart';
 import 'package:macin/shared/widgets/cards/continue_learning_card.dart';
 import 'package:macin/shared/widgets/cards/course_card.dart';
 import 'package:macin/shared/widgets/cards/mentor_card.dart';
 import 'package:macin/shared/widgets/loaders/skeleton_loader.dart';
 import 'package:macin/shared/widgets/section_header.dart';
+import 'package:macin/shared/widgets/xp_ring_avatar.dart';
 
 /// Page d'accueil MACIN.
 ///
 /// `CustomScrollView` + sections en `SliverToBoxAdapter`, chaque section
 /// branchée sur son propre `StreamBuilder` indépendant (issue #26) :
-///   - profil (en-tête + salutation)
+///   - profil (en-tête + salutation + anneau XP)
 ///   - progression (carte "Reprendre l'apprentissage")
 ///   - formateurs mis en avant
 ///   - cours publiés (cards "featured" + liste compacte), filtrables
@@ -37,19 +39,25 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
+class _CategoryItem {
+  final String label;
+  final String? value;
+  final IconData icon;
+  const _CategoryItem(this.label, this.value, this.icon);
+}
+
 class _HomePageState extends State<HomePage> {
   final _userRepo = UserRepository();
   final _courseRepo = CourseRepository();
-  final _progressRepo = ProgressRepository();
 
   String? _selectedTag;
 
-  static const Map<String, String?> _categories = {
-    'Tous': null,
-    'Développement': 'dev',
-    'UI/UX Design': 'design',
-    'Data & IA': 'data',
-  };
+  static const List<_CategoryItem> _categories = [
+    _CategoryItem('Tous', null, Icons.apps_rounded),
+    _CategoryItem('Développement', 'dev', Icons.code_rounded),
+    _CategoryItem('UI/UX Design', 'design', Icons.palette_rounded),
+    _CategoryItem('Data & IA', 'data', Icons.auto_awesome_rounded),
+  ];
 
   // `late final` : calculés une seule fois pour la durée de vie du State,
   // pas à chaque `build()`. Sinon chaque `setState()` (ex: tap sur une
@@ -70,25 +78,8 @@ class _HomePageState extends State<HomePage> {
         bottom: false,
         child: CustomScrollView(
           slivers: [
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(
-                AppDimensions.pagePaddingH,
-                AppDimensions.sm,
-                AppDimensions.pagePaddingH,
-                0,
-              ),
-              sliver: SliverToBoxAdapter(child: _buildHeader(uid)),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(
-                AppDimensions.pagePaddingH,
-                AppDimensions.lg,
-                AppDimensions.pagePaddingH,
-                0,
-              ),
-              sliver: SliverToBoxAdapter(child: _buildSearchBar(context)),
-            ),
-            SliverToBoxAdapter(child: const SizedBox(height: AppDimensions.base)),
+            SliverToBoxAdapter(child: _buildHeroHeader(uid)),
+            SliverToBoxAdapter(child: const SizedBox(height: AppDimensions.sm)),
             SliverToBoxAdapter(child: _buildCategories()),
             if (uid != null) ...[
               SliverPadding(
@@ -126,56 +117,84 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // ── En-tête / salutation ──────────────────────────────────
+  // ── En-tête héros (salutation + anneau XP + recherche) ────
 
-  Widget _buildHeader(String? uid) {
-    if (uid == null || _userStream == null) return const SizedBox.shrink();
+  Widget _buildHeroHeader(String? uid) {
+    return Column(
+      children: [
+        AuroraBackdrop(
+          background: const BoxDecoration(color: AppColors.background),
+          blobColors: const [AppColors.primary, AppColors.secondary, AppColors.accent],
+          blobOpacity: 0.16,
+          borderRadius: const BorderRadius.vertical(bottom: Radius.circular(AppDimensions.radiusXl)),
+          padding: const EdgeInsets.fromLTRB(
+            AppDimensions.pagePaddingH,
+            AppDimensions.sm,
+            AppDimensions.pagePaddingH,
+            AppDimensions.xxl,
+          ),
+          child: uid == null || _userStream == null
+              ? _buildHeaderRow(null)
+              : StreamBuilder<UserModel>(
+            stream: _userStream,
+            initialData: LocalAuthCache.getCachedUser(),
+            builder: (context, snap) => _buildHeaderRow(snap.data),
+          ),
+        ),
+        Transform.translate(
+          offset: const Offset(0, -22),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppDimensions.pagePaddingH),
+            child: _buildSearchBar(context),
+          ),
+        ),
+      ],
+    );
+  }
 
-    return StreamBuilder<UserModel>(
-      stream: _userStream,
-      initialData: LocalAuthCache.getCachedUser(),
-      builder: (context, snap) {
-        final user = snap.data;
-        final firstName = (user?.displayName ?? '').split(' ').first;
-        final greeting = _greetingForNow();
+  Widget _buildHeaderRow(UserModel? user) {
+    final firstName = (user?.displayName ?? '').split(' ').first;
+    final greeting = _greetingForNow();
 
-        return Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(greeting, style: AppTextStyles.body2),
-                  Text(
-                    firstName.isEmpty ? 'Bienvenue 👋' : '$firstName 👋',
-                    style: AppTextStyles.heading1,
-                  ),
-                ],
+    return Row(
+      children: [
+        if (user != null)
+          XpRingAvatar(
+            xp: user.xp,
+            initials: user.initials.isEmpty ? '?' : user.initials,
+            photoUrl: user.photoUrl,
+            size: 46,
+            ringWidth: 3,
+          )
+        else
+          Container(
+            width: AppDimensions.avatarSm,
+            height: AppDimensions.avatarSm,
+            decoration: const BoxDecoration(color: AppColors.primarySurface, shape: BoxShape.circle),
+            child: const Icon(Icons.person_rounded, color: AppColors.primary),
+          ),
+        const SizedBox(width: AppDimensions.md),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(greeting, style: AppTextStyles.body2),
+              Text(
+                firstName.isEmpty ? 'Bienvenue 👋' : '$firstName 👋',
+                style: AppTextStyles.heading1,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-            ),
-            _circleIconButton(
-              icon: Icons.notifications_none_rounded,
-              onTap: () {
-                // TODO: brancher NotificationCenter (issue notifications).
-              },
-            ),
-            const SizedBox(width: AppDimensions.sm),
-            CircleAvatar(
-              radius: AppDimensions.avatarSm / 2,
-              backgroundColor: AppColors.primarySurface,
-              backgroundImage: (user?.photoUrl != null && user!.photoUrl!.isNotEmpty)
-                  ? NetworkImage(user.photoUrl!)
-                  : null,
-              child: (user?.photoUrl == null || user!.photoUrl!.isEmpty)
-                  ? Text(
-                user?.initials ?? '?',
-                style: AppTextStyles.labelMedium.copyWith(color: AppColors.primary),
-              )
-                  : null,
-            ),
-          ],
-        );
-      },
+            ],
+          ),
+        ),
+        _circleIconButton(
+          icon: Icons.notifications_none_rounded,
+          onTap: () {
+            // TODO: brancher NotificationCenter (issue notifications).
+          },
+        ),
+      ],
     );
   }
 
@@ -192,9 +211,12 @@ class _HomePageState extends State<HomePage> {
       child: Container(
         width: AppDimensions.avatarSm,
         height: AppDimensions.avatarSm,
-        decoration: const BoxDecoration(
-          color: AppColors.surfaceVariant,
+        decoration: BoxDecoration(
+          color: AppColors.surface,
           shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(color: AppColors.textPrimary.withOpacity(0.06), blurRadius: 10, offset: const Offset(0, 4)),
+          ],
         ),
         child: Icon(icon, size: AppDimensions.iconMd, color: AppColors.textPrimary),
       ),
@@ -212,8 +234,11 @@ class _HomePageState extends State<HomePage> {
         height: AppDimensions.inputHeight,
         padding: const EdgeInsets.symmetric(horizontal: AppDimensions.base),
         decoration: BoxDecoration(
-          color: AppColors.surfaceVariant,
+          color: AppColors.surface,
           borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+          boxShadow: [
+            BoxShadow(color: AppColors.textPrimary.withOpacity(0.10), blurRadius: 20, offset: const Offset(0, 10)),
+          ],
         ),
         child: Row(
           children: [
@@ -222,7 +247,11 @@ class _HomePageState extends State<HomePage> {
             Expanded(
               child: Text('Rechercher un cours...', style: AppTextStyles.body2),
             ),
-            const Icon(Icons.tune_rounded, color: AppColors.textTertiary, size: AppDimensions.iconMd),
+            Container(
+              padding: const EdgeInsets.all(AppDimensions.xs),
+              decoration: const BoxDecoration(color: AppColors.primarySurface, shape: BoxShape.circle),
+              child: const Icon(Icons.tune_rounded, color: AppColors.primary, size: AppDimensions.iconMd),
+            ),
           ],
         ),
       ),
@@ -233,32 +262,46 @@ class _HomePageState extends State<HomePage> {
 
   Widget _buildCategories() {
     return SizedBox(
-      height: 40,
+      height: 44,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: AppDimensions.pagePaddingH),
         itemCount: _categories.length,
         separatorBuilder: (_, __) => const SizedBox(width: AppDimensions.sm),
         itemBuilder: (context, index) {
-          final label = _categories.keys.elementAt(index);
-          final value = _categories.values.elementAt(index);
-          final isSelected = _selectedTag == value;
+          final category = _categories[index];
+          final isSelected = _selectedTag == category.value;
 
           return GestureDetector(
-            onTap: () => setState(() => _selectedTag = value),
+            onTap: () => setState(() => _selectedTag = category.value),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 150),
               padding: const EdgeInsets.symmetric(horizontal: AppDimensions.base),
               decoration: BoxDecoration(
-                color: isSelected ? AppColors.primary : AppColors.surfaceVariant,
+                color: isSelected ? AppColors.primary : AppColors.surface,
                 borderRadius: BorderRadius.circular(AppDimensions.radiusRound),
+                border: Border.all(color: isSelected ? AppColors.primary : AppColors.border),
+                boxShadow: isSelected
+                    ? [BoxShadow(color: AppColors.primary.withOpacity(0.28), blurRadius: 10, offset: const Offset(0, 4))]
+                    : null,
               ),
               alignment: Alignment.center,
-              child: Text(
-                label,
-                style: AppTextStyles.labelMedium.copyWith(
-                  color: isSelected ? Colors.white : AppColors.textSecondary,
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    category.icon,
+                    size: AppDimensions.iconSm,
+                    color: isSelected ? Colors.white : AppColors.textSecondary,
+                  ),
+                  const SizedBox(width: AppDimensions.xs),
+                  Text(
+                    category.label,
+                    style: AppTextStyles.labelMedium.copyWith(
+                      color: isSelected ? Colors.white : AppColors.textSecondary,
+                    ),
+                  ),
+                ],
               ),
             ),
           );
@@ -275,11 +318,14 @@ class _HomePageState extends State<HomePage> {
       children: [
         Padding(
           padding: const EdgeInsets.only(right: AppDimensions.pagePaddingH),
-          child: const SectionHeader(title: 'Top formateurs'),
+          child: const SectionHeader(
+            title: 'Top formateurs',
+            icon: Icons.workspace_premium_rounded,
+          ),
         ),
         const SizedBox(height: AppDimensions.base),
         SizedBox(
-          height: AppDimensions.avatarLg + 52,
+          height: AppDimensions.avatarLg + 56,
           child: StreamBuilder<List<UserModel>>(
             stream: _mentorsStream,
             builder: (context, snap) {
@@ -304,7 +350,10 @@ class _HomePageState extends State<HomePage> {
                 padding: const EdgeInsets.only(right: AppDimensions.pagePaddingH),
                 itemCount: mentors.length,
                 separatorBuilder: (_, __) => const SizedBox(width: AppDimensions.base),
-                itemBuilder: (context, index) => MentorCard(mentor: mentors[index]),
+                itemBuilder: (context, index) => MentorCard(
+                  mentor: mentors[index],
+                  rank: index + 1,
+                ),
               );
             },
           ),
@@ -327,7 +376,7 @@ class _HomePageState extends State<HomePage> {
           children: [
             Padding(
               padding: const EdgeInsets.only(right: AppDimensions.pagePaddingH),
-              child: const SectionHeader(title: 'Cours populaires'),
+              child: const SectionHeader(title: 'Cours populaires', icon: Icons.local_fire_department_rounded),
             ),
             const SizedBox(height: AppDimensions.base),
             SizedBox(
@@ -341,10 +390,7 @@ class _HomePageState extends State<HomePage> {
                 itemBuilder: (_, __) => const CourseCardSkeleton(featured: true),
               )
                   : courses.isEmpty
-                  ? Padding(
-                padding: const EdgeInsets.only(right: AppDimensions.pagePaddingH),
-                child: Text('Aucun cours pour cette catégorie.', style: AppTextStyles.body2),
-              )
+                  ? _buildEmptyCoursesHint()
                   : ListView.separated(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.only(right: AppDimensions.pagePaddingH),
@@ -359,7 +405,7 @@ class _HomePageState extends State<HomePage> {
             const SizedBox(height: AppDimensions.xl),
             Padding(
               padding: const EdgeInsets.only(right: AppDimensions.pagePaddingH),
-              child: const SectionHeader(title: 'Tous les cours'),
+              child: const SectionHeader(title: 'Tous les cours', icon: Icons.menu_book_rounded),
             ),
             const SizedBox(height: AppDimensions.base),
             Padding(
@@ -386,6 +432,27 @@ class _HomePageState extends State<HomePage> {
           ],
         );
       },
+    );
+  }
+
+  Widget _buildEmptyCoursesHint() {
+    return Container(
+      width: 240,
+      margin: const EdgeInsets.only(right: AppDimensions.pagePaddingH),
+      padding: const EdgeInsets.all(AppDimensions.base),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceVariant,
+        borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+      ),
+      alignment: Alignment.center,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.school_outlined, color: AppColors.textTertiary, size: AppDimensions.iconXl),
+          const SizedBox(height: AppDimensions.sm),
+          Text('Aucun cours pour cette catégorie.', style: AppTextStyles.body2, textAlign: TextAlign.center),
+        ],
+      ),
     );
   }
 

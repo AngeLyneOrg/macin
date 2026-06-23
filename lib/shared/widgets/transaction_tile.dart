@@ -19,14 +19,32 @@ class TransactionTile extends StatelessWidget {
 
   const TransactionTile({super.key, required this.transaction});
 
+  IconData get _icon {
+    final desc = transaction.description.toLowerCase();
+    if (desc.contains('parrainage') || desc.contains('commission')) {
+      return Icons.people_alt_rounded;
+    }
+    if (desc.contains('recharge')) return Icons.add_card_rounded;
+    if (desc.contains('achat')) return Icons.shopping_bag_rounded;
+    return transaction.isCredit
+        ? Icons.arrow_downward_rounded
+        : Icons.arrow_upward_rounded;
+  }
+
   @override
   Widget build(BuildContext context) {
     final isCredit = transaction.isCredit;
     final color = isCredit ? AppColors.success : AppColors.error;
     final sign = isCredit ? '+' : '-';
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppDimensions.sm),
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppDimensions.sm),
+      padding: const EdgeInsets.all(AppDimensions.sm),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+        border: Border.all(color: AppColors.border, width: 0.5),
+      ),
       child: Row(
         children: [
           Container(
@@ -36,13 +54,7 @@ class TransactionTile extends StatelessWidget {
               color: color.withOpacity(0.12),
               shape: BoxShape.circle,
             ),
-            child: Icon(
-              isCredit
-                  ? Icons.arrow_downward_rounded
-                  : Icons.arrow_upward_rounded,
-              color: color,
-              size: AppDimensions.iconMd,
-            ),
+            child: Icon(_icon, color: color, size: AppDimensions.iconMd),
           ),
           const SizedBox(width: AppDimensions.md),
           Expanded(

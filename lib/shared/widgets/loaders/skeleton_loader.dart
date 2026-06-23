@@ -132,3 +132,97 @@ class MentorCardSkeleton extends StatelessWidget {
     );
   }
 }
+
+/// Skeleton de l'en-tête [ProfilePage] (avatar + nom + email) pendant
+/// le premier chargement du `StreamBuilder<UserModel>`.
+class ProfileHeaderSkeleton extends StatelessWidget {
+  const ProfileHeaderSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Shimmer(
+      child: Row(
+        children: [
+          ClipOval(
+            child: SkeletonBox(width: AppDimensions.avatarXl, height: AppDimensions.avatarXl),
+          ),
+          const SizedBox(width: AppDimensions.base),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SkeletonBox(width: 160, height: AppDimensions.skeletonLineHeight),
+                const SizedBox(height: AppDimensions.xs),
+                SkeletonBox(width: 110, height: AppDimensions.skeletonLineHeightSm),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Skeleton d'une rangée de 3 [StatPill].
+class StatRowSkeleton extends StatelessWidget {
+  const StatRowSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    Widget pill() => Expanded(
+      child: Shimmer(
+        child: SkeletonBox(
+          width: double.infinity,
+          height: 92,
+          radius: AppDimensions.radiusLg,
+        ),
+      ),
+    );
+    return Row(
+      children: [
+        pill(),
+        const SizedBox(width: AppDimensions.sm),
+        pill(),
+        const SizedBox(width: AppDimensions.sm),
+        pill(),
+      ],
+    );
+  }
+}
+
+/// Skeleton d'une ligne [TransactionTile].
+class TransactionTileSkeleton extends StatelessWidget {
+  const TransactionTileSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Shimmer(
+      child: Container(
+        margin: const EdgeInsets.only(bottom: AppDimensions.sm),
+        padding: const EdgeInsets.all(AppDimensions.sm),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+          border: Border.all(color: AppColors.border, width: 0.5),
+        ),
+        child: Row(
+          children: [
+            ClipOval(child: SkeletonBox(width: AppDimensions.avatarSm, height: AppDimensions.avatarSm)),
+            const SizedBox(width: AppDimensions.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SkeletonBox(width: 140, height: AppDimensions.skeletonLineHeightSm),
+                  const SizedBox(height: AppDimensions.xs),
+                  SkeletonBox(width: 70, height: AppDimensions.skeletonLineHeightSm),
+                ],
+              ),
+            ),
+            SkeletonBox(width: 56, height: AppDimensions.skeletonLineHeightSm),
+          ],
+        ),
+      ),
+    );
+  }
+}

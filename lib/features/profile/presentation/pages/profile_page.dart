@@ -1,34 +1,71 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
-import '../../../../core/constants/app_colors.dart';
-import '../../../../core/constants/app_dimensions.dart';
-import '../../../../core/constants/app_text_styles.dart';
-import '../../../../core/extensions/extensions.dart';
-import '../../../../shared/models/models.dart';
-import '../../../../shared/widgets/badge_medal.dart';
-import '../../../../shared/widgets/stat_pill.dart';
-import '../../../../shared/widgets/xp_progress_bar.dart';
-import '../../../auth/data/auth_repository.dart';
+import 'package:macin/core/constants/app_colors.dart';
+import 'package:macin/core/constants/app_dimensions.dart';
+import 'package:macin/core/constants/app_text_styles.dart';
+import 'package:macin/core/extensions/extensions.dart';
+import 'package:macin/core/utils/xp_utils.dart';
+import 'package:macin/router/app_routes.dart';
+import 'package:macin/shared/models/models.dart';
+import 'package:macin/shared/models/user_model.dart';
+import 'package:macin/shared/repositories/repositories.dart';
+import 'package:macin/shared/repositories/user_repository.dart';
+import 'package:macin/shared/services/local_auth_cache.dart';
+import 'package:macin/shared/widgets/backgrounds/aurora_backdrop.dart';
+import 'package:macin/shared/widgets/badge_medal.dart';
+import 'package:macin/shared/widgets/loaders/skeleton_loader.dart';
+import 'package:macin/shared/widgets/section_header.dart';
+import 'package:macin/shared/widgets/stat_pill.dart';
+import 'package:macin/shared/widgets/xp_progress_bar.dart';
+import 'package:macin/shared/widgets/xp_ring_avatar.dart';
+import 'package:macin/features/auth/data/auth_repository.dart';
 
-/// Page Profil — infos étudiant, progression XP, statistiques, badges.
+/// Page Profil — version fusionnée des deux variantes existantes.
 ///
-/// DONNÉES TEMPLATES : [_templateBadges] et les stats affichées
-/// simulent ce que [UserRepository.watchUser] et une future requête
-/// sur `user_progress` retourneront. Le `currentXp` est en dur ici ;
-/// remplace tout le haut de page par un `StreamBuilder<UserModel>`
-/// une fois prêt à brancher Firestore.
-class ProfilePage extends StatelessWidget {
+/// Ce qui a été repris de chaque version :
+///  - Header "hero" avec [AuroraBackdrop] + [XpRingAvatar], et cache local
+///    ([LocalAuthCache]) en `initialData` pour un premier rendu instantané
+///    même hors-ligne.
+///  - Carte de niveau détaillée (titre, emoji, XP restant) via [XpUtils].
+///  - Progression de cours réelle (en cours / terminés), calculée depuis
+///    [ProgressRepository.watchAllProgress] plutôt qu'estimée.
+///  - Streak basé sur la vraie donnée `learningProfile['streak']` quand
+///    elle existe (sinon 0), au lieu d'une valeur figée en dur (ex-12).
+///  - Galerie de badges complète (catalogue [_allBadges]) : on voit aussi
+///    les badges pas encore obtenus, l'état "débloqué" étant calculé sur
+///    les vraies données via [UserModel.hasBadge].
+///  - Écrans dédiés pour "non connecté", "chargement" et "erreur".
+///
+/// Hypothèses faites sur [UserModel] (à ajuster si les noms diffèrent
+/// dans le modèle réel) : `isStudent` / `isInstructor`, `hasBadge(id)`,
+/// `learningProfile` (Map), `xp`, `initials`, `displayName`, `email`,
+/// `photoUrl`, `enrolledCourseIds`, `badgeIds`.
+///
+/// TODO : remplacer [_allBadges] par une vraie collection Firestore
+/// `badges` (via un futur `BadgeRepository`) dès qu'elle sera peuplée.
+class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
 
-  // ── Données templates ──────────────────────────────────────
-  static const _templateName = 'Ange Orelien';
-  static const _templateEmail = 'ange.orelien@macin.app';
-  static const _templateXp = 340;
-  static const _templateCoursesCount = 4;
-  static const _templateStreak = 12;
-  static const _templateCertificates = 1;
+  @override
+  State<ProfilePage> createState() => _ProfilePageState();
+}
 
-  static final List<BadgeModel> _templateBadges = [
+class _ProfilePageState extends State<ProfilePage> {
+  final _userRepo = UserRepository();
+  final _progressRepo = ProgressRepository();
+
+  late final String? _uid = FirebaseAuth.instance.currentUser?.uid;
+
+  late final Stream<UserModel>? _userStream =
+  _uid != null ? _userRepo.watchUser(_uid!) : null;
+
+  late final Stream<List<UserProgressModel>>? _progressStream =
+  _uid != null ? _progressRepo.watchAllProgress(_uid!) : null;
+
+  // ── Catalogue de badges (pas encore en Firestore) ────────────────
+  static final List<BadgeModel> _allBadges = [
     const BadgeModel(
       badgeId: 'badge_first_lesson',
       name: 'Premier pas',
@@ -74,9 +111,8 @@ class ProfilePage extends StatelessWidget {
       xpBonus: 100,
       rarity: 'legendary',
     ),
-    // Badge non obtenu, pour montrer l'état "verrouillé"
     const BadgeModel(
-      badgeId: 'badge_locked_example',
+      badgeId: 'badge_marathonien',
       name: 'Marathonien',
       description: '30 jours de suite',
       iconUrl: '',
@@ -86,50 +122,141 @@ class ProfilePage extends StatelessWidget {
     ),
   ];
 
-  static const _unlockedBadgeIds = {
-    'badge_first_lesson',
-    'badge_quiz_master',
-    'badge_streak_7',
-    'badge_flutter_certified',
-    'badge_referral_5',
-  };
-
   @override
   Widget build(BuildContext context) {
+    if (_uid == null || _userStream == null) {
+      return _buildUnauthenticated();
+    }
+
+    return StreamBuilder<UserModel>(
+      stream: _userStream!,
+      initialData: LocalAuthCache.getCachedUser(),
+      builder: (context, userSnap) {
+        if (userSnap.hasError) {
+          return _buildError();
+        }
+
+        final user = userSnap.data;
+        if (user == null) {
+          return _buildLoading();
+        }
+
+        return StreamBuilder<List<UserProgressModel>>(
+          stream: _progressStream ?? const Stream.empty(),
+          builder: (context, progressSnap) {
+            final progressList =
+                progressSnap.data ?? const <UserProgressModel>[];
+            final coursesInProgress =
+                progressList.where((p) => p.progressPercent < 100).length;
+            final completedCourses =
+                progressList.where((p) => p.progressPercent >= 100).length;
+            // Streak réel si déjà calculé côté Firestore (Cloud Function
+            // déclenchée à chaque leçon terminée), sinon 0 en attendant.
+            final streak = (user.learningProfile['streak'] as int?) ?? 0;
+
+            return _buildContent(
+              user: user,
+              coursesInProgress: coursesInProgress,
+              completedCourses: completedCourses,
+              streak: streak,
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // ── États ─────────────────────────────────────────────────────
+
+  Widget _buildLoading() {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(AppDimensions.pagePaddingH),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: const [
+              SizedBox(height: AppDimensions.sm),
+              ProfileHeaderSkeleton(),
+              SizedBox(height: AppDimensions.xl),
+              StatRowSkeleton(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildError() {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.person_off_outlined,
+                size: AppDimensions.iconXxl, color: AppColors.textTertiary),
+            const SizedBox(height: AppDimensions.base),
+            Text('Impossible de charger le profil',
+                style: AppTextStyles.heading3),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUnauthenticated() {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.lock_outline_rounded,
+                size: AppDimensions.iconXxl, color: AppColors.textTertiary),
+            const SizedBox(height: AppDimensions.base),
+            Text('Connecte-toi pour voir ton profil',
+                style: AppTextStyles.heading3),
+            const SizedBox(height: AppDimensions.base),
+            TextButton(
+              onPressed: () => context.goNamed(AppRoutes.login),
+              child: const Text('Se connecter'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Contenu principal ────────────────────────────────────────
+
+  Widget _buildContent({
+    required UserModel user,
+    required int coursesInProgress,
+    required int completedCourses,
+    required int streak,
+  }) {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: CustomScrollView(
         slivers: [
-          SliverAppBar(
-            backgroundColor: AppColors.background,
-            elevation: 0,
-            pinned: true,
-            title: Text('Profil', style: AppTextStyles.heading2),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.settings_outlined),
-                onPressed: () {
-                  // TODO: context.pushNamed(AppRoutes.settings)
-                },
-              ),
-            ],
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppDimensions.pagePaddingH,
-              ),
+          SliverToBoxAdapter(child: _buildHeroHeader(context, user)),
+          SliverPadding(
+            padding: const EdgeInsets.symmetric(
+                horizontal: AppDimensions.pagePaddingH),
+            sliver: SliverToBoxAdapter(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(height: AppDimensions.sm),
-                  _buildHeader(),
+                  const SizedBox(height: AppDimensions.lg),
+                  _buildStatsRow(user, streak),
                   const SizedBox(height: AppDimensions.xl),
-                  _buildXpCard(),
+                  _buildLevelCard(user),
                   const SizedBox(height: AppDimensions.xl),
-                  _buildStatsRow(),
+                  _buildProgressSection(coursesInProgress, completedCourses),
                   const SizedBox(height: AppDimensions.xl),
-                  _buildBadgesSection(context),
+                  _buildBadgesSection(user),
                   const SizedBox(height: AppDimensions.xl),
                   _buildMenuSection(context),
                   const SizedBox(height: AppDimensions.xxl),
@@ -142,103 +269,137 @@ class ProfilePage extends StatelessWidget {
     );
   }
 
-  // ── Header (avatar + nom + email) ───────────────────────────
-  Widget _buildHeader() {
-    return Row(
-      children: [
-        Container(
-          width: AppDimensions.avatarXl,
-          height: AppDimensions.avatarXl,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: const LinearGradient(
-              colors: [AppColors.primary, AppColors.primaryDark],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
-          child: Center(
-            child: Text(
-              _templateName.initials,
-              style: AppTextStyles.heading1.copyWith(color: Colors.white),
-            ),
-          ),
-        ),
-        const SizedBox(width: AppDimensions.base),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+  // ── En-tête héros (avatar + anneau XP + nom + rôle) ──────────
+  Widget _buildHeroHeader(BuildContext context, UserModel user) {
+    final roleLabel = user.isStudent
+        ? 'Étudiant'
+        : user.isInstructor
+        ? 'Formateur'
+        : 'Admin';
+
+    return AuroraBackdrop(
+      background: const BoxDecoration(color: AppColors.background),
+      blobColors: const [
+        AppColors.secondary,
+        AppColors.primary,
+        AppColors.accent
+      ],
+      blobOpacity: 0.16,
+      borderRadius: const BorderRadius.vertical(
+          bottom: Radius.circular(AppDimensions.radiusXl)),
+      padding: const EdgeInsets.fromLTRB(
+        AppDimensions.pagePaddingH,
+        AppDimensions.sm,
+        AppDimensions.pagePaddingH,
+        AppDimensions.base,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(_templateName, style: AppTextStyles.heading2),
-              const SizedBox(height: 2),
-              Text(_templateEmail, style: AppTextStyles.body2),
-              const SizedBox(height: AppDimensions.xs),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppDimensions.sm,
-                  vertical: 2,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.primarySurface,
-                  borderRadius: BorderRadius.circular(AppDimensions.radiusRound),
-                ),
-                child: Text(
-                  'Étudiant',
-                  style: AppTextStyles.labelSmall.copyWith(color: AppColors.primary),
-                ),
+              Text('Profil', style: AppTextStyles.heading1),
+              IconButton(
+                icon: const Icon(Icons.settings_outlined,
+                    color: AppColors.textPrimary),
+                onPressed: () {
+                  // TODO: context.pushNamed(AppRoutes.settings)
+                },
               ),
             ],
           ),
-        ),
-        IconButton(
-          icon: const Icon(Icons.edit_outlined, color: AppColors.textSecondary),
-          onPressed: () {
-            // TODO: context.pushNamed(AppRoutes.editProfile)
-          },
-        ),
-      ],
-    );
-  }
-
-  // ── Carte XP ─────────────────────────────────────────────────
-  Widget _buildXpCard() {
-    return Container(
-      padding: const EdgeInsets.all(AppDimensions.base),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
-        border: Border.all(color: AppColors.border, width: 0.5),
+          const SizedBox(height: AppDimensions.sm),
+          Row(
+            children: [
+              XpRingAvatar(
+                xp: user.xp,
+                initials: user.initials.isEmpty ? '?' : user.initials,
+                photoUrl: user.photoUrl,
+                size: 76,
+                ringWidth: 4,
+                showLevelBadge: true,
+              ),
+              const SizedBox(width: AppDimensions.base),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      user.displayName.isEmpty
+                          ? 'Étudiant MACIN'
+                          : user.displayName,
+                      style: AppTextStyles.heading2,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      user.email,
+                      style: AppTextStyles.body2,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: AppDimensions.xs),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppDimensions.sm,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius:
+                        BorderRadius.circular(AppDimensions.radiusRound),
+                      ),
+                      child: Text(
+                        roleLabel,
+                        style: AppTextStyles.labelSmall
+                            .copyWith(color: AppColors.primary),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.edit_outlined,
+                    color: AppColors.textSecondary),
+                onPressed: () {
+                  // TODO: context.pushNamed(AppRoutes.editProfile)
+                },
+              ),
+            ],
+          ),
+        ],
       ),
-      child: const XpProgressBar(currentXp: _templateXp),
     );
   }
 
   // ── Rangée de stats ──────────────────────────────────────────
-  Widget _buildStatsRow() {
+  Widget _buildStatsRow(UserModel user, int streak) {
     return Row(
-      children: const [
+      children: [
         Expanded(
           child: StatPill(
             icon: Icons.menu_book_rounded,
-            value: '$_templateCoursesCount',
+            value: '${user.enrolledCourseIds.length}',
             label: 'Cours suivis',
           ),
         ),
-        SizedBox(width: AppDimensions.sm),
+        const SizedBox(width: AppDimensions.sm),
         Expanded(
           child: StatPill(
             icon: Icons.local_fire_department_rounded,
-            value: '$_templateStreak',
+            value: '$streak',
             label: 'Jours de suite',
             iconColor: AppColors.accent,
           ),
         ),
-        SizedBox(width: AppDimensions.sm),
+        const SizedBox(width: AppDimensions.sm),
         Expanded(
           child: StatPill(
             icon: Icons.workspace_premium_rounded,
-            value: '$_templateCertificates',
-            label: 'Certificats',
+            value: '${user.badgeIds.length}',
+            label: 'Badges',
             iconColor: AppColors.secondary,
           ),
         ),
@@ -246,35 +407,122 @@ class ProfilePage extends StatelessWidget {
     );
   }
 
-  // ── Badges ────────────────────────────────────────────────────
-  Widget _buildBadgesSection(BuildContext context) {
+  // ── Carte de niveau (titre, emoji, XP restant) ───────────────
+  Widget _buildLevelCard(UserModel user) {
+    final level = XpUtils.levelFromXp(user.xp);
+    final levelTitle = XpUtils.levelTitle(level);
+    final levelEmoji = XpUtils.levelEmoji(level);
+    final xpInLevel = XpUtils.xpInCurrentLevel(user.xp);
+    final xpToNext = XpUtils.xpToNextLevel(user.xp);
+
+    return Container(
+      padding: const EdgeInsets.all(AppDimensions.base),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.textPrimary.withOpacity(0.06),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(levelEmoji, style: const TextStyle(fontSize: 22)),
+              const SizedBox(width: AppDimensions.sm),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Niveau $level — $levelTitle',
+                      style: AppTextStyles.body1Medium),
+                  Text('${user.xp} XP total',
+                      style: AppTextStyles.captionMedium),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: AppDimensions.base),
+          XpProgressBar(currentXp: user.xp),
+          const SizedBox(height: AppDimensions.xs),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('$xpInLevel XP', style: AppTextStyles.captionMedium),
+              Text('encore $xpToNext XP pour niv. ${level + 1}',
+                  style: AppTextStyles.captionMedium),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Progression des cours ─────────────────────────────────────
+  Widget _buildProgressSection(int inProgress, int completed) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        const SectionHeader(
+            title: 'Ma progression', icon: Icons.trending_up_rounded),
+        const SizedBox(height: AppDimensions.base),
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('Mes badges', style: AppTextStyles.heading2),
-            Text(
-              '${_unlockedBadgeIds.length}/${_templateBadges.length}',
-              style: AppTextStyles.captionMedium,
+            Expanded(
+              child: _ProgressMiniCard(
+                icon: Icons.play_circle_outline_rounded,
+                color: AppColors.primary,
+                value: '$inProgress',
+                label: 'En cours',
+              ),
+            ),
+            const SizedBox(width: AppDimensions.sm),
+            Expanded(
+              child: _ProgressMiniCard(
+                icon: Icons.check_circle_outline_rounded,
+                color: AppColors.success,
+                value: '$completed',
+                label: 'Terminés',
+              ),
             ),
           ],
+        ),
+      ],
+    );
+  }
+
+  // ── Badges ────────────────────────────────────────────────────
+  Widget _buildBadgesSection(UserModel user) {
+    final unlockedCount =
+        _allBadges.where((b) => user.hasBadge(b.badgeId)).length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionHeader(
+          title: 'Mes badges',
+          icon: Icons.emoji_events_rounded,
+          subtitle: '$unlockedCount/${_allBadges.length} débloqués',
         ),
         const SizedBox(height: AppDimensions.base),
         SizedBox(
           height: 100,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
-            itemCount: _templateBadges.length,
-            separatorBuilder: (_, __) => const SizedBox(width: AppDimensions.md),
+            itemCount: _allBadges.length,
+            separatorBuilder: (_, __) =>
+            const SizedBox(width: AppDimensions.md),
             itemBuilder: (context, index) {
-              final badge = _templateBadges[index];
-              final isLocked = !_unlockedBadgeIds.contains(badge.badgeId);
+              final badge = _allBadges[index];
+              final isLocked = !user.hasBadge(badge.badgeId);
               return BadgeMedal(
                 badge: badge,
                 isLocked: isLocked,
-                onTap: () => _showBadgeDetail(context, badge, isLocked),
+                onTap: () => _showBadgeDetail(badge, isLocked),
               );
             },
           ),
@@ -283,14 +531,15 @@ class ProfilePage extends StatelessWidget {
     );
   }
 
-  void _showBadgeDetail(BuildContext context, BadgeModel badge, bool isLocked) {
+  void _showBadgeDetail(BadgeModel badge, bool isLocked) {
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppDimensions.radiusXl)),
+        borderRadius:
+        BorderRadius.vertical(top: Radius.circular(AppDimensions.radiusXl)),
       ),
-      builder: (context) => Padding(
+      builder: (ctx) => Padding(
         padding: const EdgeInsets.all(AppDimensions.xl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -323,34 +572,67 @@ class ProfilePage extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Paramètres', style: AppTextStyles.heading2),
+        const SectionHeader(title: 'Paramètres', icon: Icons.tune_rounded),
         const SizedBox(height: AppDimensions.sm),
-        _MenuTile(
-          icon: Icons.notifications_outlined,
-          label: 'Notifications',
-          onTap: () {},
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.textPrimary.withOpacity(0.05),
+                blurRadius: 14,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: AppDimensions.base),
+          child: Column(
+            children: [
+              _MenuTile(
+                icon: Icons.notifications_outlined,
+                iconColor: AppColors.primary,
+                label: 'Notifications',
+                onTap: () {},
+              ),
+              const Divider(height: 1, color: AppColors.divider),
+              _MenuTile(
+                icon: Icons.lock_outline_rounded,
+                iconColor: AppColors.secondary,
+                label: 'Confidentialité & sécurité',
+                onTap: () {},
+              ),
+              const Divider(height: 1, color: AppColors.divider),
+              _MenuTile(
+                icon: Icons.dark_mode_outlined,
+                iconColor: AppColors.textSecondary,
+                label: 'Apparence',
+                onTap: () {},
+              ),
+              const Divider(height: 1, color: AppColors.divider),
+              _MenuTile(
+                icon: Icons.help_outline_rounded,
+                iconColor: AppColors.success,
+                label: 'Aide & support',
+                onTap: () {},
+              ),
+            ],
+          ),
         ),
-        _MenuTile(
-          icon: Icons.lock_outline_rounded,
-          label: 'Confidentialité & sécurité',
-          onTap: () {},
-        ),
-        _MenuTile(
-          icon: Icons.dark_mode_outlined,
-          label: 'Apparence',
-          onTap: () {},
-        ),
-        _MenuTile(
-          icon: Icons.help_outline_rounded,
-          label: 'Aide & support',
-          onTap: () {},
-        ),
-        const SizedBox(height: AppDimensions.sm),
-        _MenuTile(
-          icon: Icons.logout_rounded,
-          label: 'Se déconnecter',
-          color: AppColors.error,
-          onTap: () => _handleSignOut(context),
+        const SizedBox(height: AppDimensions.base),
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.errorSurface,
+            borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: AppDimensions.base),
+          child: _MenuTile(
+            icon: Icons.logout_rounded,
+            iconColor: AppColors.error,
+            label: 'Se déconnecter',
+            labelColor: AppColors.error,
+            onTap: () => _handleSignOut(context),
+          ),
         ),
       ],
     );
@@ -359,16 +641,17 @@ class ProfilePage extends StatelessWidget {
   Future<void> _handleSignOut(BuildContext context) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         title: const Text('Se déconnecter ?'),
-        content: const Text('Tu devras te reconnecter pour accéder à tes cours.'),
+        content:
+        const Text('Tu devras te reconnecter pour accéder à tes cours.'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.of(ctx).pop(false),
             child: const Text('Annuler'),
           ),
           TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('Se déconnecter',
                 style: TextStyle(color: AppColors.error)),
           ),
@@ -384,30 +667,82 @@ class ProfilePage extends StatelessWidget {
   }
 }
 
-class _MenuTile extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final Color? color;
+// ═══════════════════════════════════════════════════════════════
+// Widgets internes
+// ═══════════════════════════════════════════════════════════════
 
-  const _MenuTile({
+class _ProgressMiniCard extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String value;
+  final String label;
+
+  const _ProgressMiniCard({
     required this.icon,
+    required this.color,
+    required this.value,
     required this.label,
-    required this.onTap,
-    this.color,
   });
 
   @override
   Widget build(BuildContext context) {
-    final tileColor = color ?? AppColors.textPrimary;
+    return Container(
+      padding: const EdgeInsets.all(AppDimensions.base),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+        border: Border.all(color: color.withOpacity(0.2), width: 0.5),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: AppDimensions.iconLg),
+          const SizedBox(width: AppDimensions.sm),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(value, style: AppTextStyles.heading2.copyWith(color: color)),
+              Text(label, style: AppTextStyles.captionMedium),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MenuTile extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final String label;
+  final VoidCallback onTap;
+  final Color? labelColor;
+
+  const _MenuTile({
+    required this.icon,
+    required this.iconColor,
+    required this.label,
+    required this.onTap,
+    this.labelColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tileColor = labelColor ?? AppColors.textPrimary;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: AppDimensions.md),
         child: Row(
           children: [
-            Icon(icon, color: tileColor, size: AppDimensions.iconLg),
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: iconColor.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
+              ),
+              child: Icon(icon, color: iconColor, size: AppDimensions.iconMd),
+            ),
             const SizedBox(width: AppDimensions.base),
             Expanded(
               child: Text(
@@ -415,7 +750,7 @@ class _MenuTile extends StatelessWidget {
                 style: AppTextStyles.body1Medium.copyWith(color: tileColor),
               ),
             ),
-            if (color == null)
+            if (labelColor == null)
               const Icon(Icons.chevron_right_rounded,
                   color: AppColors.textTertiary),
           ],

@@ -6,8 +6,8 @@ import '../../../core/constants/app_text_styles.dart';
 /// Chip de filtre sélectionnable (niveau, tag...).
 ///
 /// Différent du `Chip` Material standard : état visuel "actif" plus
-/// marqué (fond primaire plein) pour bien voir quel filtre est
-/// appliqué dans une liste horizontale de chips.
+/// marqué (fond primaire plein + légère ombre portée) pour bien voir
+/// quel filtre est appliqué dans une liste horizontale de chips.
 ///
 /// Usage :
 /// ```dart
@@ -43,11 +43,20 @@ class MacinFilterChip extends StatelessWidget {
           vertical: AppDimensions.sm,
         ),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary : AppColors.surfaceVariant,
+          color: isSelected ? AppColors.primary : AppColors.surface,
           borderRadius: BorderRadius.circular(AppDimensions.radiusRound),
           border: Border.all(
             color: isSelected ? AppColors.primary : AppColors.border,
           ),
+          boxShadow: isSelected
+              ? [
+            BoxShadow(
+              color: AppColors.primary.withOpacity(0.28),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ]
+              : null,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,

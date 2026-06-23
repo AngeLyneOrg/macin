@@ -11,7 +11,7 @@ enum _CourseCardVariant { featured, compact }
 ///   - [CourseCard.featured] : grande card image plein cadre (280x200),
 ///     pour les listes horizontales "mises en avant".
 ///   - [CourseCard.compact] : petite card image + infos dessous (168 de
-///     large), pour les listes denses ("Tous les cours", recherche...).
+///     large), pour les listes denses (Accueil, Catalogue, recherche...).
 ///
 /// NOTE : [CourseModel] ne stocke pas le nom du formateur (seulement
 /// [CourseModel.instructorId]) — pour éviter une lecture Firestore par
@@ -71,75 +71,94 @@ class CourseCard extends StatelessWidget {
       child: Container(
         width: AppDimensions.courseCardWidth,
         height: AppDimensions.courseCardHeight,
-        clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
-          color: AppColors.surfaceVariant,
-        ),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            _networkImage(course.thumbnailUrl),
-            // Dégradé pour la lisibilité du texte par-dessus l'image
-            DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withOpacity(0.0),
-                    Colors.black.withOpacity(0.78),
-                  ],
-                  stops: const [0.35, 1.0],
-                ),
-              ),
-            ),
-            Positioned(
-              top: AppDimensions.sm,
-              left: AppDimensions.sm,
-              child: _priceBadge(),
-            ),
-            if (onBookmarkTap != null)
-              Positioned(
-                top: AppDimensions.sm,
-                right: AppDimensions.sm,
-                child: _bookmarkButton(),
-              ),
-            Positioned(
-              left: AppDimensions.md,
-              right: AppDimensions.md,
-              bottom: AppDimensions.md,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    course.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTextStyles.heading3.copyWith(color: Colors.white),
-                  ),
-                  const SizedBox(height: AppDimensions.xs),
-                  Text(
-                    '${course.totalLessons} leçons',
-                    style: AppTextStyles.caption.copyWith(color: Colors.white70),
-                  ),
-                  if (progressPercent != null) ...[
-                    const SizedBox(height: AppDimensions.sm),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(AppDimensions.radiusRound),
-                      child: LinearProgressIndicator(
-                        value: (progressPercent! / 100).clamp(0.0, 1.0),
-                        minHeight: AppDimensions.xpBarHeightSm,
-                        backgroundColor: Colors.white24,
-                        valueColor: const AlwaysStoppedAnimation(AppColors.accent),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.textPrimary.withOpacity(0.10),
+              blurRadius: 18,
+              offset: const Offset(0, 10),
             ),
           ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Container(color: AppColors.surfaceVariant, child: _networkImage(course.thumbnailUrl)),
+              // Dégradé pour la lisibilité du texte par-dessus l'image
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withOpacity(0.0),
+                      Colors.black.withOpacity(0.80),
+                    ],
+                    stops: const [0.32, 1.0],
+                  ),
+                ),
+              ),
+              Positioned(
+                top: AppDimensions.sm,
+                left: AppDimensions.sm,
+                child: _priceBadge(),
+              ),
+              if (onBookmarkTap != null)
+                Positioned(
+                  top: AppDimensions.sm,
+                  right: AppDimensions.sm,
+                  child: _bookmarkButton(),
+                ),
+              Positioned(
+                left: AppDimensions.md,
+                right: AppDimensions.md,
+                bottom: AppDimensions.md,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      course.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.heading3.copyWith(color: Colors.white),
+                    ),
+                    const SizedBox(height: AppDimensions.xs),
+                    Row(
+                      children: [
+                        const Icon(Icons.star_rounded, size: AppDimensions.iconSm, color: AppColors.accentLight),
+                        const SizedBox(width: 2),
+                        Text(
+                          course.averageRating.toStringAsFixed(1),
+                          style: AppTextStyles.captionMedium.copyWith(color: Colors.white),
+                        ),
+                        const SizedBox(width: AppDimensions.sm),
+                        Text(
+                          '·  ${course.totalLessons} leçons',
+                          style: AppTextStyles.caption.copyWith(color: Colors.white70),
+                        ),
+                      ],
+                    ),
+                    if (progressPercent != null) ...[
+                      const SizedBox(height: AppDimensions.sm),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(AppDimensions.radiusRound),
+                        child: LinearProgressIndicator(
+                          value: (progressPercent! / 100).clamp(0.0, 1.0),
+                          minHeight: AppDimensions.xpBarHeightSm,
+                          backgroundColor: Colors.white24,
+                          valueColor: const AlwaysStoppedAnimation(AppColors.accent),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -155,7 +174,13 @@ class CourseCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
-          border: Border.all(color: AppColors.border, width: 0.5),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.textPrimary.withOpacity(0.06),
+              blurRadius: 14,
+              offset: const Offset(0, 6),
+            ),
+          ],
         ),
         clipBehavior: Clip.antiAlias,
         child: Column(
@@ -179,6 +204,11 @@ class CourseCard extends StatelessWidget {
                     right: AppDimensions.xs,
                     child: _bookmarkButton(small: true),
                   ),
+                Positioned(
+                  left: AppDimensions.xs,
+                  bottom: AppDimensions.xs,
+                  child: _levelTag(),
+                ),
               ],
             ),
             Padding(
@@ -275,11 +305,32 @@ class CourseCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(AppDimensions.radiusRound),
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0, 2))],
       ),
       child: Text(
         course.isFree ? 'Gratuit' : course.price.asFcfa,
         style: (small ? AppTextStyles.labelSmall : AppTextStyles.labelMedium)
-            .copyWith(color: AppColors.textPrimary),
+            .copyWith(color: course.isFree ? AppColors.success : AppColors.textPrimary),
+      ),
+    );
+  }
+
+  Widget _levelTag() {
+    final label = switch (course.level) {
+      'beginner' => 'Débutant',
+      'intermediate' => 'Intermédiaire',
+      'advanced' => 'Avancé',
+      _ => course.level,
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: AppDimensions.sm, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.55),
+        borderRadius: BorderRadius.circular(AppDimensions.radiusRound),
+      ),
+      child: Text(
+        label,
+        style: AppTextStyles.labelSmall.copyWith(color: Colors.white),
       ),
     );
   }
