@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:video_player/video_player.dart';
 
 import 'package:macin/core/constants/app_colors.dart';
 import 'package:macin/core/constants/app_dimensions.dart';
@@ -73,13 +74,21 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
       await _courseRepo.getLessons(widget.courseId, module.moduleId);
       final idx = lessons.indexWhere((l) => l.lessonId == widget.lessonId);
       if (idx != -1) {
+        var lesson = lessons[idx];
+
+        // ✅ Restaurer le localPath depuis Hive (persisté entre sessions)
+        final cachedPath = await _offlineService.resolveLocalPath(lesson);
+        if (cachedPath != null && lesson.localPath == null) {
+          lesson = lesson.copyWith(localPath: cachedPath);
+        }
+
         final data = _LessonData(
-          lesson: lessons[idx],
+          lesson: lesson,
           module: module,
           allLessons: lessons,
           currentIndex: idx,
         );
-        setState(() => _currentLesson = lessons[idx]);
+        setState(() => _currentLesson = lesson);
         return data;
       }
     }
@@ -582,72 +591,148 @@ class _VideoContent extends StatefulWidget {
 }
 
 class _VideoContentState extends State<_VideoContent> {
-  bool _isPlaying = false;
+  VideoPlayerController? _controller;
+  bool _isInitializing = false;
+  bool _hasError = false;
+  String? _errorMessage;
+  bool _showControls = true;
+
+  @override
+  void dispose() {
+    _controller?.removeListener(_onVideoUpdate);
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _initializePlayer() async {
+    if (_isInitializing || _controller != null) return;
+    setState(() {
+      _isInitializing = true;
+      _hasError = false;
+    });
+
+    try {
+      final VideoPlayerController ctrl;
+
+      // Priorité au fichier local (offline), sinon stream R2
+      if (widget.lesson.localPath != null) {
+        final file = File(widget.lesson.localPath!);
+        if (await file.exists()) {
+          ctrl = VideoPlayerController.file(file);
+        } else {
+          // Fichier local introuvable → fallback URL
+          ctrl = _controllerFromUrl();
+        }
+      } else {
+        ctrl = _controllerFromUrl();
+      }
+
+      await ctrl.initialize();
+      ctrl.addListener(_onVideoUpdate);
+
+      if (mounted) {
+        setState(() {
+          _controller = ctrl;
+          _isInitializing = false;
+        });
+        await ctrl.play();
+      } else {
+        ctrl.dispose();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isInitializing = false;
+          _hasError = true;
+          _errorMessage = e.toString();
+        });
+      }
+    }
+  }
+
+  VideoPlayerController _controllerFromUrl() {
+    final url = widget.lesson.contentUrl;
+    if (url.isEmpty) throw Exception('URL vidéo manquante dans Firestore.');
+    return VideoPlayerController.networkUrl(Uri.parse(url));
+  }
+
+  void _onVideoUpdate() {
+    if (!mounted) return;
+    final ctrl = _controller;
+    if (ctrl == null) return;
+
+    // Déclencher onEnd quand la vidéo se termine
+    final pos = ctrl.value.position;
+    final dur = ctrl.value.duration;
+    if (dur.inSeconds > 0 && pos >= dur - const Duration(seconds: 1)) {
+      widget.onEnd();
+    }
+    setState(() {});
+  }
+
+  void _togglePlayPause() {
+    final ctrl = _controller;
+    if (ctrl == null) return;
+    ctrl.value.isPlaying ? ctrl.pause() : ctrl.play();
+    // Afficher les contrôles brièvement à chaque interaction
+    setState(() => _showControls = true);
+  }
+
+  void _retry() {
+    _controller?.dispose();
+    setState(() {
+      _controller = null;
+      _hasError = false;
+    });
+    _initializePlayer();
+  }
+
+  String _fmt(Duration d) {
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
 
   @override
   Widget build(BuildContext context) {
+    final ctrl = _controller;
+
     return Column(
       children: [
-        // Zone vidéo (placeholder — TODO: video_player / better_player)
+        // ── Zone vidéo 16:9 ──────────────────────────────────
         AspectRatio(
           aspectRatio: 16 / 9,
           child: Container(
             color: Colors.black,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                if (!_isPlaying)
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      GestureDetector(
-                        onTap: () {
-                          setState(() => _isPlaying = true);
-                          // TODO: initialiser video_player ici
-                          Future.delayed(
-                              const Duration(seconds: 3), widget.onEnd);
-                        },
-                        child: Container(
-                          width: 72,
-                          height: 72,
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withOpacity(0.9),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.play_arrow_rounded,
-                              color: Colors.white, size: 42),
-                        ),
-                      ),
-                      const SizedBox(height: AppDimensions.md),
-                      Text('Appuie pour lancer la vidéo',
-                          style: AppTextStyles.body2
-                              .copyWith(color: Colors.white70)),
-                    ],
-                  )
-                else
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const CircularProgressIndicator(color: Colors.white),
-                      const SizedBox(height: AppDimensions.sm),
-                      Text('Chargement de la vidéo…',
-                          style: AppTextStyles.body2
-                              .copyWith(color: Colors.white70)),
-                    ],
-                  ),
-              ],
-            ),
+            child: _buildVideoArea(ctrl),
           ),
         ),
 
+        // ── Métadonnées + notes de cours ─────────────────────
         Expanded(
           child: ListView(
-            padding:
-            const EdgeInsets.all(AppDimensions.pagePaddingH),
+            padding: const EdgeInsets.all(AppDimensions.pagePaddingH),
             children: [
               Row(children: [
                 _LessonTypeBadge(type: widget.lesson.type),
                 const SizedBox(width: AppDimensions.sm),
+                // Badge "hors-ligne" si lecture locale
+                if (widget.lesson.localPath != null)
+                  Padding(
+                    padding: const EdgeInsets.only(right: AppDimensions.xs),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.successSurface,
+                        borderRadius: BorderRadius.circular(AppDimensions.radiusRound),
+                      ),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        const Icon(Icons.offline_bolt_rounded, size: 12, color: AppColors.success),
+                        const SizedBox(width: 3),
+                        Text('Hors-ligne', style: AppTextStyles.labelSmall.copyWith(color: AppColors.success)),
+                      ]),
+                    ),
+                  ),
                 Text('${widget.lesson.durationMin} min',
                     style: AppTextStyles.captionMedium),
               ]),
@@ -659,7 +744,6 @@ class _VideoContentState extends State<_VideoContent> {
                 onDownload: widget.onDownload,
                 onDeleteLocal: widget.onDeleteLocal,
               ),
-              // Blocs enrichis (notes de cours de la vidéo)
               if (widget.lesson.hasBlocks) ...[
                 const SizedBox(height: AppDimensions.xl),
                 Text('Notes de cours', style: AppTextStyles.heading3),
@@ -673,6 +757,173 @@ class _VideoContentState extends State<_VideoContent> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildVideoArea(VideoPlayerController? ctrl) {
+    // ── Erreur ───────────────────────────────────────────
+    if (_hasError) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline_rounded, color: Colors.redAccent, size: 48),
+              const SizedBox(height: 12),
+              Text('Impossible de lire la vidéo',
+                  style: AppTextStyles.body1Medium.copyWith(color: Colors.white),
+                  textAlign: TextAlign.center),
+              const SizedBox(height: 6),
+              Text(_errorMessage ?? '',
+                  style: AppTextStyles.caption.copyWith(color: Colors.white54),
+                  textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: _retry,
+                icon: const Icon(Icons.refresh_rounded, color: Colors.white),
+                label: const Text('Réessayer', style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // ── Initialisation ───────────────────────────────────
+    if (_isInitializing) {
+      return const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(color: Colors.white),
+            SizedBox(height: 12),
+            Text('Chargement…', style: TextStyle(color: Colors.white70)),
+          ],
+        ),
+      );
+    }
+
+    // ── Écran de lancement (avant le premier tap) ────────
+    if (ctrl == null) {
+      return GestureDetector(
+        onTap: _initializePlayer,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Container(color: const Color(0xFF0b0f2e)),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withOpacity(0.9),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.play_arrow_rounded,
+                      color: Colors.white, size: 42),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  widget.lesson.localPath != null
+                      ? 'Lecture hors-ligne'
+                      : 'Appuie pour lancer la vidéo',
+                  style: const TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    // ── Player actif ─────────────────────────────────────
+    final value = ctrl.value;
+    final position = value.position;
+    final duration = value.duration;
+
+    return GestureDetector(
+      onTap: _togglePlayPause,
+      child: Stack(
+        alignment: Alignment.bottomCenter,
+        children: [
+          // Vidéo centrée
+          Center(
+            child: AspectRatio(
+              aspectRatio: value.aspectRatio,
+              child: VideoPlayer(ctrl),
+            ),
+          ),
+
+          // Overlay play/pause au centre
+          if (!value.isPlaying)
+            Container(
+              color: Colors.black38,
+              child: const Center(
+                child: Icon(Icons.play_circle_outline_rounded,
+                    size: 64, color: Colors.white),
+              ),
+            ),
+
+          // Barre de contrôles bas
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.bottomCenter,
+                end: Alignment.topCenter,
+                colors: [Colors.black87, Colors.transparent],
+              ),
+            ),
+            padding: const EdgeInsets.fromLTRB(8, 24, 8, 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Barre de progression scrubable
+                VideoProgressIndicator(
+                  ctrl,
+                  allowScrubbing: true,
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  colors: VideoProgressColors(
+                    playedColor: AppColors.primary,
+                    bufferedColor: Colors.white38,
+                    backgroundColor: Colors.white12,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    IconButton(
+                      icon: Icon(
+                        value.isPlaying
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded,
+                        color: Colors.white,
+                      ),
+                      onPressed: _togglePlayPause,
+                    ),
+                    Text(
+                      '${_fmt(position)} / ${_fmt(duration)}',
+                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                    const Spacer(),
+                    // Icône indiquant la source (local ou réseau)
+                    Icon(
+                      widget.lesson.localPath != null
+                          ? Icons.offline_bolt_rounded
+                          : Icons.wifi_rounded,
+                      color: Colors.white54,
+                      size: 16,
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

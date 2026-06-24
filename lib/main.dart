@@ -2,13 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:macin/features/ai_tutor/presentation/pages/ai_tutor_page.dart';
-import 'package:macin/features/auth/presentation/pages/onboarding_page.dart';
-import 'package:macin/features/auth/presentation/pages/register_page.dart';
-import 'package:macin/features/auth/presentation/pages/splash_page.dart';
-import 'package:macin/features/profile/presentation/pages/profile_page.dart';
-import 'package:macin/features/wallet/presentation/pages/wallet_page.dart';
 import 'package:macin/shared/services/local_auth_cache.dart';
+import 'package:macin/shared/services/offline_metadata_cache.dart';
 import 'core/constants/app_theme.dart';
 import 'router/app_router.dart';
 import 'firebase_options.dart';
@@ -36,6 +31,7 @@ void main() async {
 
   await Hive.initFlutter();
   await LocalAuthCache.init();
+  await OfflineMetadataCache.init(); // ✅ Cache offline persistant
 
   runApp(const MacinApp());
 }
