@@ -1,6 +1,9 @@
+import 'dart:io';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+
 import 'package:macin/core/constants/app_colors.dart';
 import 'package:macin/core/constants/app_dimensions.dart';
 import 'package:macin/core/constants/app_text_styles.dart';
@@ -9,21 +12,27 @@ import 'package:macin/router/app_routes.dart';
 import 'package:macin/shared/models/lesson_model.dart';
 import 'package:macin/shared/models/models.dart';
 import 'package:macin/shared/repositories/repositories.dart';
+import 'package:macin/shared/services/offline_service.dart';
 import 'package:macin/shared/widgets/buttons/macin_primary_button.dart';
+import 'package:macin/shared/widgets/lesson/lesson_content_renderer.dart';
 
-/// Page de lecture d'une leçon MACIN.
-///
-/// Supporte 4 types de contenu :
-///   - `video`     : lecteur vidéo (placeholder WebView / video_player)
-///   - `article`   : rendu Markdown avec scroll
-///   - `pdf`       : visionneuse PDF (placeholder)
-///   - `code_demo` : éditeur de code lecture seule
-///
-/// Logique de progression :
-///   - Un bouton "Marquer comme terminé" écrit dans [ProgressRepository]
-///   - Un StreamBuilder sur `user_progress` écoute le statut en temps réel
-///   - La liste des leçons du module est chargée pour la navigation
-///     Précédent / Suivant
+// ─────────────────────────────────────────────────────────────────────────────
+// LessonPlayerPage  ← VERSION ENRICHIE
+//
+// Intègre :
+//   • LessonContentRenderer pour les blocs enrichis (heading/text/code/tip…)
+//   • OfflineService pour télécharger PDF et articles hors-ligne
+//   • Indicateur de progression de téléchargement
+//   • Badge "Disponible hors-ligne" si localPath présent
+//   • Passage vers les exercices du module via le bouton "Exercices"
+//
+// Supporte 4 types de contenu :
+//   video      → lecteur vidéo (placeholder, TODO: video_player / better_player)
+//   article    → LessonContentRenderer si blocks présents, sinon Markdown brut
+//   pdf        → visionneuse PDF (placeholder, TODO: pdfx / syncfusion)
+//   code_demo  → snippet de code lecture seule
+// ─────────────────────────────────────────────────────────────────────────────
+
 class LessonPlayerPage extends StatefulWidget {
   final String lessonId;
   final String courseId;
@@ -41,32 +50,96 @@ class LessonPlayerPage extends StatefulWidget {
 class _LessonPlayerPageState extends State<LessonPlayerPage> {
   final _courseRepo = CourseRepository();
   final _progressRepo = ProgressRepository();
+  final _offlineService = OfflineService();
 
   late final String? _uid = FirebaseAuth.instance.currentUser?.uid;
 
   bool _isMarkingDone = false;
-  bool _hasReachedEnd = false; // simulé : l'utilisateur a scrollé jusqu'en bas
+  bool _hasReachedEnd = false;
 
-  // Future pour charger la leçon + son module (pour Prev/Next)
+  // Téléchargement offline
+  bool _isDownloading = false;
+  double _downloadProgress = 0.0;
+
   late final Future<_LessonData> _lessonDataFuture = _loadLessonData();
 
+  // Leçon courante (mutable pour mettre à jour localPath après téléchargement)
+  LessonModel? _currentLesson;
+
   Future<_LessonData> _loadLessonData() async {
-    // Recherche le module contenant cette leçon via tous les modules du cours
     final modules = await _courseRepo.watchModules(widget.courseId).first;
     for (final module in modules) {
-      final lessons = await _courseRepo.getLessons(widget.courseId, module.moduleId);
+      final lessons =
+      await _courseRepo.getLessons(widget.courseId, module.moduleId);
       final idx = lessons.indexWhere((l) => l.lessonId == widget.lessonId);
       if (idx != -1) {
-        return _LessonData(
+        final data = _LessonData(
           lesson: lessons[idx],
           module: module,
           allLessons: lessons,
           currentIndex: idx,
         );
+        setState(() => _currentLesson = lessons[idx]);
+        return data;
       }
     }
     throw Exception('Leçon introuvable');
   }
+
+  @override
+  void dispose() {
+    _offlineService.dispose();
+    super.dispose();
+  }
+
+  // ── Téléchargement offline ────────────────────────────────
+
+  Future<void> _downloadLesson(LessonModel lesson) async {
+    if (_isDownloading) return;
+    setState(() {
+      _isDownloading = true;
+      _downloadProgress = 0.0;
+    });
+
+    try {
+      final String path;
+      if (lesson.isArticle) {
+        path = await _offlineService.saveArticleLocally(lesson);
+      } else {
+        path = await _offlineService.downloadLesson(
+          lesson: lesson,
+          onProgress: (p) => setState(() => _downloadProgress = p),
+        );
+      }
+      setState(() => _currentLesson = lesson.copyWith(localPath: path));
+      if (mounted) {
+        context.showSuccessSnack('Leçon disponible hors-ligne ✓');
+      }
+    } catch (e) {
+      if (mounted) {
+        context.showErrorSnack('Erreur téléchargement : $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isDownloading = false;
+          _downloadProgress = 0.0;
+        });
+      }
+    }
+  }
+
+  Future<void> _deleteLocal(LessonModel lesson) async {
+    try {
+      await _offlineService.deleteLocal(lesson);
+      setState(() => _currentLesson = lesson.copyWith(localPath: null));
+      if (mounted) context.showSuccessSnack('Contenu hors-ligne supprimé.');
+    } catch (e) {
+      if (mounted) context.showErrorSnack('Erreur suppression : $e');
+    }
+  }
+
+  // ── Build ─────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -82,22 +155,25 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
             return _buildError();
           }
           final data = snap.data!;
-          return _buildLoaded(data);
+          // Utilise la leçon mise à jour (localPath) si disponible
+          final enrichedData = _currentLesson != null
+              ? data.withLesson(_currentLesson!)
+              : data;
+          return _buildLoaded(enrichedData);
         },
       ),
     );
   }
 
-  // ── États ──────────────────────────────────────────────────
+  // ── États ─────────────────────────────────────────────────
 
   Widget _buildLoading() {
     return Column(
       children: [
         _buildTopBar(null, null),
         const Expanded(
-          child: Center(
-            child: CircularProgressIndicator(color: AppColors.primary),
-          ),
+          child:
+          Center(child: CircularProgressIndicator(color: AppColors.primary)),
         ),
       ],
     );
@@ -118,9 +194,8 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
                 Text('Leçon introuvable', style: AppTextStyles.heading2),
                 const SizedBox(height: AppDimensions.sm),
                 TextButton(
-                  onPressed: () => context.pop(),
-                  child: const Text('Retour'),
-                ),
+                    onPressed: () => context.pop(),
+                    child: const Text('Retour')),
               ],
             ),
           ),
@@ -138,22 +213,16 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
           : const Stream.empty(),
       builder: (context, progressSnap) {
         final progress = progressSnap.data;
-        final isCompleted = progress?.isLessonCompleted(lesson.lessonId) ?? false;
+        final isCompleted =
+            progress?.isLessonCompleted(lesson.lessonId) ?? false;
 
         return Column(
           children: [
-            // ── AppBar ─────────────────────────────────────
             _buildTopBar(lesson, data),
-
-            // ── Barre de progression du cours ───────────────
             if (progress != null) _buildCourseProgressBar(progress),
-
-            // ── Contenu ────────────────────────────────────
-            Expanded(
-              child: _buildContent(lesson),
-            ),
-
-            // ── Navigation Prev/Next + CTA ──────────────────
+            // Barre de téléchargement si en cours
+            if (_isDownloading) _buildDownloadBar(),
+            Expanded(child: _buildContent(lesson)),
             _buildBottomBar(context, data, lesson, isCompleted),
           ],
         );
@@ -161,7 +230,7 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
     );
   }
 
-  // ── AppBar ─────────────────────────────────────────────────
+  // ── AppBar ────────────────────────────────────────────────
 
   Widget _buildTopBar(LessonModel? lesson, _LessonData? data) {
     return SafeArea(
@@ -170,7 +239,8 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
         padding: const EdgeInsets.symmetric(horizontal: AppDimensions.md),
         decoration: const BoxDecoration(
           color: AppColors.surface,
-          border: Border(bottom: BorderSide(color: AppColors.border, width: 0.5)),
+          border:
+          Border(bottom: BorderSide(color: AppColors.border, width: 0.5)),
         ),
         child: Row(
           children: [
@@ -185,11 +255,9 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (data != null)
-                    Text(
-                      data.module.title,
-                      style: AppTextStyles.captionMedium,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    Text(data.module.title,
+                        style: AppTextStyles.captionMedium,
+                        overflow: TextOverflow.ellipsis),
                   Text(
                     lesson?.title ?? 'Chargement...',
                     style: AppTextStyles.body1Medium,
@@ -198,6 +266,25 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
                 ],
               ),
             ),
+            // Badge offline
+            if (lesson != null && lesson.isAvailableOffline)
+              Padding(
+                padding: const EdgeInsets.only(right: AppDimensions.xs),
+                child: Tooltip(
+                  message: 'Disponible hors-ligne',
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppColors.successSurface,
+                      borderRadius:
+                      BorderRadius.circular(AppDimensions.radiusRound),
+                    ),
+                    child: const Icon(Icons.offline_bolt_rounded,
+                        size: 14, color: AppColors.success),
+                  ),
+                ),
+              ),
             if (data != null)
               Text(
                 '${data.currentIndex + 1}/${data.allLessons.length}',
@@ -215,8 +302,44 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
       color: AppColors.border,
       child: FractionallySizedBox(
         alignment: Alignment.centerLeft,
-        widthFactor: progress.progressPercent / 100,
+        widthFactor: (progress.progressPercent / 100).clamp(0.0, 1.0),
         child: Container(color: AppColors.primary),
+      ),
+    );
+  }
+
+  Widget _buildDownloadBar() {
+    return Container(
+      color: AppColors.primarySurface,
+      padding:
+      const EdgeInsets.symmetric(horizontal: AppDimensions.pagePaddingH),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: AppDimensions.xs),
+          Row(
+            children: [
+              const Icon(Icons.download_rounded,
+                  size: AppDimensions.iconSm, color: AppColors.primary),
+              const SizedBox(width: AppDimensions.xs),
+              Text(
+                'Téléchargement… ${(_downloadProgress * 100).toStringAsFixed(0)} %',
+                style: AppTextStyles.captionMedium
+                    .copyWith(color: AppColors.primary),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppDimensions.xs),
+          LinearProgressIndicator(
+            value: _downloadProgress,
+            backgroundColor: AppColors.border,
+            color: AppColors.primary,
+            minHeight: 3,
+            borderRadius:
+            BorderRadius.circular(AppDimensions.radiusRound),
+          ),
+          const SizedBox(height: AppDimensions.xs),
+        ],
       ),
     );
   }
@@ -225,18 +348,40 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
 
   Widget _buildContent(LessonModel lesson) {
     return switch (lesson.type) {
-      'video' => _VideoContent(lesson: lesson, onEnd: () {
-        setState(() => _hasReachedEnd = true);
-      }),
-      'article' => _ArticleContent(lesson: lesson, onEnd: () {
-        setState(() => _hasReachedEnd = true);
-      }),
-      'pdf' => _PdfContent(lesson: lesson, onEnd: () {
-        setState(() => _hasReachedEnd = true);
-      }),
-      'code_demo' => _CodeDemoContent(lesson: lesson, onEnd: () {
-        setState(() => _hasReachedEnd = true);
-      }),
+      'video' => _VideoContent(
+        lesson: lesson,
+        onEnd: () => setState(() => _hasReachedEnd = true),
+        onDownload: lesson.isDownloadable && !lesson.isAvailableOffline
+            ? () => _downloadLesson(lesson)
+            : null,
+        onDeleteLocal: lesson.isAvailableOffline
+            ? () => _deleteLocal(lesson)
+            : null,
+      ),
+      'article' => _ArticleContent(
+        lesson: lesson,
+        onEnd: () => setState(() => _hasReachedEnd = true),
+        onDownload: lesson.isDownloadable && !lesson.isAvailableOffline
+            ? () => _downloadLesson(lesson)
+            : null,
+        onDeleteLocal: lesson.isAvailableOffline
+            ? () => _deleteLocal(lesson)
+            : null,
+      ),
+      'pdf' => _PdfContent(
+        lesson: lesson,
+        onEnd: () => setState(() => _hasReachedEnd = true),
+        onDownload: lesson.isDownloadable && !lesson.isAvailableOffline
+            ? () => _downloadLesson(lesson)
+            : null,
+        onDeleteLocal: lesson.isAvailableOffline
+            ? () => _deleteLocal(lesson)
+            : null,
+      ),
+      'code_demo' => _CodeDemoContent(
+        lesson: lesson,
+        onEnd: () => setState(() => _hasReachedEnd = true),
+      ),
       _ => Center(child: Text('Type inconnu : ${lesson.type}')),
     };
   }
@@ -266,7 +411,7 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // ── Récompense XP ────────────────────────────────
+          // XP reward
           if (!isCompleted)
             Padding(
               padding: const EdgeInsets.only(bottom: AppDimensions.sm),
@@ -285,13 +430,12 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
               ),
             ),
 
-          // ── CTA + Navigation ────────────────────────────
           Row(
             children: [
               if (hasPrev)
                 IconButton(
-                  onPressed: () => _navigateToLesson(context,
-                      data.allLessons[data.currentIndex - 1]),
+                  onPressed: () => _navigateToLesson(
+                      context, data.allLessons[data.currentIndex - 1]),
                   icon: const Icon(Icons.chevron_left_rounded),
                   color: AppColors.textSecondary,
                   tooltip: 'Leçon précédente',
@@ -308,8 +452,8 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
               ),
               if (hasNext)
                 IconButton(
-                  onPressed: () => _navigateToLesson(context,
-                      data.allLessons[data.currentIndex + 1]),
+                  onPressed: () => _navigateToLesson(
+                      context, data.allLessons[data.currentIndex + 1]),
                   icon: const Icon(Icons.chevron_right_rounded),
                   color: AppColors.textSecondary,
                   tooltip: 'Leçon suivante',
@@ -328,9 +472,23 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
         const Icon(Icons.check_circle_rounded,
             color: AppColors.success, size: AppDimensions.iconMd),
         const SizedBox(width: AppDimensions.xs),
-        Text('Terminé', style: AppTextStyles.body1Medium
-            .copyWith(color: AppColors.success)),
+        Text('Terminé',
+            style:
+            AppTextStyles.body1Medium.copyWith(color: AppColors.success)),
         const Spacer(),
+        // Bouton raccourci vers les exercices du module
+        TextButton.icon(
+          onPressed: () => context.goNamed(
+            AppRoutes.exercisePage,
+            pathParameters: {
+              'id': widget.courseId,
+              'moduleId': data.module.moduleId,
+            },
+          ),
+          icon: const Icon(Icons.quiz_outlined, size: AppDimensions.iconSm),
+          label: const Text('Exercices'),
+          style: TextButton.styleFrom(foregroundColor: AppColors.secondary),
+        ),
         if (hasNext)
           TextButton(
             onPressed: () => _navigateToLesson(
@@ -360,9 +518,7 @@ class _LessonPlayerPageState extends State<LessonPlayerPage> {
         context.showSuccessSnack('+${lesson.xpReward} XP gagnés !');
       }
     } catch (e) {
-      if (mounted) {
-        context.showErrorSnack('Erreur : $e');
-      }
+      if (mounted) context.showErrorSnack('Erreur : $e');
     } finally {
       if (mounted) setState(() => _isMarkingDone = false);
     }
@@ -393,20 +549,33 @@ class _LessonData {
     required this.allLessons,
     required this.currentIndex,
   });
+
+  _LessonData withLesson(LessonModel updated) => _LessonData(
+    lesson: updated,
+    module: module,
+    allLessons: allLessons,
+    currentIndex: currentIndex,
+  );
 }
 
-// ═══════════════════════════════════════════════════════════════
-// Widgets de contenu selon le type de leçon
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════════
+// Widgets de contenu
+// ═══════════════════════════════════════════════════════════════════════════════
 
-/// Contenu vidéo.
-///
-/// TODO: intégrer `video_player` ou `better_player` pour les vraies
-/// vidéos Cloudflare R2. La clé `onEnd` déclenche le bouton "Terminer".
+// ── Vidéo ─────────────────────────────────────────────────────────────────────
+
 class _VideoContent extends StatefulWidget {
   final LessonModel lesson;
   final VoidCallback onEnd;
-  const _VideoContent({required this.lesson, required this.onEnd});
+  final VoidCallback? onDownload;
+  final VoidCallback? onDeleteLocal;
+
+  const _VideoContent({
+    required this.lesson,
+    required this.onEnd,
+    this.onDownload,
+    this.onDeleteLocal,
+  });
 
   @override
   State<_VideoContent> createState() => _VideoContentState();
@@ -419,7 +588,7 @@ class _VideoContentState extends State<_VideoContent> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // ── Zone vidéo (placeholder) ──────────────────────
+        // Zone vidéo (placeholder — TODO: video_player / better_player)
         AspectRatio(
           aspectRatio: 16 / 9,
           child: Container(
@@ -434,9 +603,9 @@ class _VideoContentState extends State<_VideoContent> {
                       GestureDetector(
                         onTap: () {
                           setState(() => _isPlaying = true);
-                          // TODO: initialiser le vrai lecteur vidéo ici
-                          // Simule la fin après 3s pour le dev
-                          Future.delayed(const Duration(seconds: 3), widget.onEnd);
+                          // TODO: initialiser video_player ici
+                          Future.delayed(
+                              const Duration(seconds: 3), widget.onEnd);
                         },
                         child: Container(
                           width: 72,
@@ -445,20 +614,14 @@ class _VideoContentState extends State<_VideoContent> {
                             color: AppColors.primary.withOpacity(0.9),
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(
-                            Icons.play_arrow_rounded,
-                            color: Colors.white,
-                            size: 42,
-                          ),
+                          child: const Icon(Icons.play_arrow_rounded,
+                              color: Colors.white, size: 42),
                         ),
                       ),
                       const SizedBox(height: AppDimensions.md),
-                      Text(
-                        'Appuie pour lancer la vidéo',
-                        style: AppTextStyles.body2.copyWith(
-                          color: Colors.white70,
-                        ),
-                      ),
+                      Text('Appuie pour lancer la vidéo',
+                          style: AppTextStyles.body2
+                              .copyWith(color: Colors.white70)),
                     ],
                   )
                 else
@@ -467,11 +630,9 @@ class _VideoContentState extends State<_VideoContent> {
                     children: [
                       const CircularProgressIndicator(color: Colors.white),
                       const SizedBox(height: AppDimensions.sm),
-                      Text(
-                        'Chargement de la vidéo...',
-                        style: AppTextStyles.body2
-                            .copyWith(color: Colors.white70),
-                      ),
+                      Text('Chargement de la vidéo…',
+                          style: AppTextStyles.body2
+                              .copyWith(color: Colors.white70)),
                     ],
                   ),
               ],
@@ -479,33 +640,35 @@ class _VideoContentState extends State<_VideoContent> {
           ),
         ),
 
-        // ── Informations leçon ────────────────────────────
         Expanded(
           child: ListView(
-            padding: const EdgeInsets.all(AppDimensions.pagePaddingH),
+            padding:
+            const EdgeInsets.all(AppDimensions.pagePaddingH),
             children: [
-              Row(
-                children: [
-                  _LessonTypeBadge(type: widget.lesson.type),
-                  const SizedBox(width: AppDimensions.sm),
-                  Text(
-                    '${widget.lesson.durationMin} min',
-                    style: AppTextStyles.captionMedium,
-                  ),
-                ],
-              ),
+              Row(children: [
+                _LessonTypeBadge(type: widget.lesson.type),
+                const SizedBox(width: AppDimensions.sm),
+                Text('${widget.lesson.durationMin} min',
+                    style: AppTextStyles.captionMedium),
+              ]),
               const SizedBox(height: AppDimensions.md),
               Text(widget.lesson.title, style: AppTextStyles.heading2),
               const SizedBox(height: AppDimensions.sm),
-              if (widget.lesson.isDownloadable)
-                OutlinedButton.icon(
-                  onPressed: () {
-                    // TODO: déclencher le téléchargement offline
-                  },
-                  icon: const Icon(Icons.download_outlined,
-                      size: AppDimensions.iconMd),
-                  label: const Text('Télécharger pour regarder hors-ligne'),
+              _OfflineActionButton(
+                lesson: widget.lesson,
+                onDownload: widget.onDownload,
+                onDeleteLocal: widget.onDeleteLocal,
+              ),
+              // Blocs enrichis (notes de cours de la vidéo)
+              if (widget.lesson.hasBlocks) ...[
+                const SizedBox(height: AppDimensions.xl),
+                Text('Notes de cours', style: AppTextStyles.heading3),
+                const SizedBox(height: AppDimensions.sm),
+                LessonContentRenderer(
+                  blocks: widget.lesson.blocks,
+                  padding: EdgeInsets.zero,
                 ),
+              ],
             ],
           ),
         ),
@@ -514,14 +677,20 @@ class _VideoContentState extends State<_VideoContent> {
   }
 }
 
-/// Contenu article (Markdown).
-///
-/// TODO: intégrer `flutter_markdown` pour un vrai rendu Markdown.
-/// `contentUrl` est ici le texte Markdown brut pour les articles.
+// ── Article ───────────────────────────────────────────────────────────────────
+
 class _ArticleContent extends StatefulWidget {
   final LessonModel lesson;
   final VoidCallback onEnd;
-  const _ArticleContent({required this.lesson, required this.onEnd});
+  final VoidCallback? onDownload;
+  final VoidCallback? onDeleteLocal;
+
+  const _ArticleContent({
+    required this.lesson,
+    required this.onEnd,
+    this.onDownload,
+    this.onDeleteLocal,
+  });
 
   @override
   State<_ArticleContent> createState() => _ArticleContentState();
@@ -554,33 +723,55 @@ class _ArticleContentState extends State<_ArticleContent> {
 
   @override
   Widget build(BuildContext context) {
+    final lesson = widget.lesson;
+
     return ListView(
       controller: _scrollController,
-      padding: const EdgeInsets.all(AppDimensions.pagePaddingH),
+      padding:
+      const EdgeInsets.all(AppDimensions.pagePaddingH),
       children: [
-        Row(
-          children: [
-            _LessonTypeBadge(type: widget.lesson.type),
-            const SizedBox(width: AppDimensions.sm),
-            Text('${widget.lesson.durationMin} min de lecture',
-                style: AppTextStyles.captionMedium),
-          ],
-        ),
+        // Méta
+        Row(children: [
+          _LessonTypeBadge(type: lesson.type),
+          const SizedBox(width: AppDimensions.sm),
+          Text('${lesson.durationMin} min de lecture',
+              style: AppTextStyles.captionMedium),
+          const Spacer(),
+          _OfflineActionButton(
+            lesson: lesson,
+            onDownload: widget.onDownload,
+            onDeleteLocal: widget.onDeleteLocal,
+            compact: true,
+          ),
+        ]),
         const SizedBox(height: AppDimensions.base),
-        Text(widget.lesson.title, style: AppTextStyles.heading1),
+        Text(lesson.title, style: AppTextStyles.heading1),
         const SizedBox(height: AppDimensions.xl),
         const Divider(color: AppColors.divider),
         const SizedBox(height: AppDimensions.xl),
-        // TODO: remplacer par MarkdownBody(data: widget.lesson.contentUrl)
+
+        // Contenu enrichi (blocs admin) ou texte Markdown brut
+        if (lesson.hasBlocks)
+          LessonContentRenderer(
+            blocks: lesson.blocks,
+            padding: EdgeInsets.zero,
+          )
+        else if (lesson.hasArticleContent)
+        // TODO: remplacer par MarkdownBody(data: lesson.articleContent)
         // via le package flutter_markdown
-        Text(
-          widget.lesson.contentUrl.startsWith('http')
-              ? '(Contenu chargé depuis : ${widget.lesson.contentUrl})'
-              : widget.lesson.contentUrl,
-          style: AppTextStyles.body1.copyWith(height: 1.7),
-        ),
+          Text(lesson.articleContent,
+              style: AppTextStyles.body1.copyWith(height: 1.7))
+        else
+          Text(
+            lesson.contentUrl.startsWith('http')
+                ? '(Contenu chargé depuis : ${lesson.contentUrl})'
+                : lesson.contentUrl,
+            style: AppTextStyles.body1.copyWith(height: 1.7),
+          ),
+
         const SizedBox(height: AppDimensions.xxxl),
-        // Marqueur de fin d'article
+
+        // Marqueur de fin
         Container(
           padding: const EdgeInsets.all(AppDimensions.base),
           decoration: BoxDecoration(
@@ -592,8 +783,9 @@ class _ArticleContentState extends State<_ArticleContent> {
               const Icon(Icons.check_circle_rounded,
                   color: AppColors.success, size: AppDimensions.iconMd),
               const SizedBox(width: AppDimensions.sm),
-              Text('Fin de l\'article', style: AppTextStyles.body2
-                  .copyWith(color: AppColors.success)),
+              Text('Fin de l\'article',
+                  style:
+                  AppTextStyles.body2.copyWith(color: AppColors.success)),
             ],
           ),
         ),
@@ -602,81 +794,109 @@ class _ArticleContentState extends State<_ArticleContent> {
   }
 }
 
-/// Contenu PDF.
-///
-/// TODO: intégrer `syncfusion_flutter_pdfviewer` ou `pdfx`.
+// ── PDF ───────────────────────────────────────────────────────────────────────
+
 class _PdfContent extends StatelessWidget {
   final LessonModel lesson;
   final VoidCallback onEnd;
-  const _PdfContent({required this.lesson, required this.onEnd});
+  final VoidCallback? onDownload;
+  final VoidCallback? onDeleteLocal;
+
+  const _PdfContent({
+    required this.lesson,
+    required this.onEnd,
+    this.onDownload,
+    this.onDeleteLocal,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppDimensions.xl),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: AppColors.errorSurface,
-                borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+    // Si localPath disponible, on pourrait ouvrir le fichier local
+    // TODO: intégrer pdfx ou syncfusion_flutter_pdfviewer
+    final hasLocal = lesson.localPath != null &&
+        File(lesson.localPath!).existsSync();
+
+    return ListView(
+      padding: const EdgeInsets.all(AppDimensions.pagePaddingH),
+      children: [
+        Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: AppDimensions.xl),
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: AppColors.errorSurface,
+                  borderRadius:
+                  BorderRadius.circular(AppDimensions.radiusLg),
+                ),
+                child: const Icon(Icons.picture_as_pdf_rounded,
+                    color: AppColors.error, size: AppDimensions.iconXxl),
               ),
-              child: const Icon(Icons.picture_as_pdf_rounded,
-                  color: AppColors.error, size: AppDimensions.iconXxl),
-            ),
-            const SizedBox(height: AppDimensions.base),
-            Text(lesson.title, style: AppTextStyles.heading2,
-                textAlign: TextAlign.center),
-            const SizedBox(height: AppDimensions.sm),
-            Text(
-              'Visionneuse PDF (intégration syncfusion ou pdfx à venir)',
-              style: AppTextStyles.body2,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: AppDimensions.xl),
-            OutlinedButton.icon(
-              onPressed: onEnd,
-              icon: const Icon(Icons.open_in_new_rounded,
-                  size: AppDimensions.iconMd),
-              label: const Text('Ouvrir le PDF'),
-            ),
-          ],
+              const SizedBox(height: AppDimensions.base),
+              Text(lesson.title,
+                  style: AppTextStyles.heading2,
+                  textAlign: TextAlign.center),
+              const SizedBox(height: AppDimensions.sm),
+              Text(
+                hasLocal
+                    ? 'PDF disponible hors-ligne'
+                    : 'Visionneuse PDF (pdfx à intégrer)',
+                style: AppTextStyles.body2,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: AppDimensions.xl),
+              OutlinedButton.icon(
+                onPressed: onEnd,
+                icon: const Icon(Icons.open_in_new_rounded,
+                    size: AppDimensions.iconMd),
+                label: const Text('Ouvrir le PDF'),
+              ),
+              const SizedBox(height: AppDimensions.md),
+              _OfflineActionButton(
+                lesson: lesson,
+                onDownload: onDownload,
+                onDeleteLocal: onDeleteLocal,
+              ),
+            ],
+          ),
         ),
-      ),
+      ],
     );
   }
 }
 
-/// Contenu code_demo — snippet de code avec coloration syntaxique.
-///
-/// TODO: intégrer `flutter_highlight` ou `code_text_field`.
+// ── Code Demo ─────────────────────────────────────────────────────────────────
+
 class _CodeDemoContent extends StatelessWidget {
   final LessonModel lesson;
   final VoidCallback onEnd;
+
   const _CodeDemoContent({required this.lesson, required this.onEnd});
 
   @override
   Widget build(BuildContext context) {
-    // Appel onEnd au build car un code_demo n'a pas de "fin naturelle"
     WidgetsBinding.instance.addPostFrameCallback((_) => onEnd());
 
     return ListView(
       padding: const EdgeInsets.all(AppDimensions.pagePaddingH),
       children: [
-        Row(
-          children: [
-            _LessonTypeBadge(type: lesson.type),
-            const SizedBox(width: AppDimensions.sm),
-            Text('${lesson.durationMin} min', style: AppTextStyles.captionMedium),
-          ],
-        ),
+        Row(children: [
+          _LessonTypeBadge(type: lesson.type),
+          const SizedBox(width: AppDimensions.sm),
+          Text('${lesson.durationMin} min',
+              style: AppTextStyles.captionMedium),
+        ]),
         const SizedBox(height: AppDimensions.base),
         Text(lesson.title, style: AppTextStyles.heading2),
         const SizedBox(height: AppDimensions.xl),
+        // Blocs enrichis si présents (explications avant le code)
+        if (lesson.hasBlocks) ...[
+          LessonContentRenderer(blocks: lesson.blocks, padding: EdgeInsets.zero),
+          const SizedBox(height: AppDimensions.base),
+        ],
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(AppDimensions.base),
@@ -701,8 +921,70 @@ class _CodeDemoContent extends StatelessWidget {
   }
 }
 
-// ── Badge type de leçon ────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// Widgets utilitaires partagés dans ce fichier
+// ═══════════════════════════════════════════════════════════════════════════════
 
+/// Bouton de téléchargement / suppression du contenu offline.
+class _OfflineActionButton extends StatelessWidget {
+  final LessonModel lesson;
+  final VoidCallback? onDownload;
+  final VoidCallback? onDeleteLocal;
+
+  /// Si [compact] = true, affiche une IconButton au lieu d'un OutlinedButton.
+  final bool compact;
+
+  const _OfflineActionButton({
+    required this.lesson,
+    this.onDownload,
+    this.onDeleteLocal,
+    this.compact = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (!lesson.isDownloadable) return const SizedBox.shrink();
+
+    if (lesson.isAvailableOffline) {
+      // Leçon déjà en local → proposer la suppression
+      if (compact) {
+        return IconButton(
+          icon: const Icon(Icons.offline_bolt_rounded),
+          color: AppColors.success,
+          tooltip: 'Disponible hors-ligne — Toucher pour supprimer',
+          onPressed: onDeleteLocal,
+        );
+      }
+      return OutlinedButton.icon(
+        onPressed: onDeleteLocal,
+        icon: const Icon(Icons.delete_outline_rounded,
+            size: AppDimensions.iconMd, color: AppColors.error),
+        label: const Text('Supprimer du stockage local'),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.error,
+          side: const BorderSide(color: AppColors.error),
+        ),
+      );
+    }
+
+    // Pas encore téléchargé
+    if (compact) {
+      return IconButton(
+        icon: const Icon(Icons.download_outlined),
+        color: AppColors.primary,
+        tooltip: 'Télécharger pour lire hors-ligne',
+        onPressed: onDownload,
+      );
+    }
+    return OutlinedButton.icon(
+      onPressed: onDownload,
+      icon: const Icon(Icons.download_outlined, size: AppDimensions.iconMd),
+      label: const Text('Télécharger pour lire hors-ligne'),
+    );
+  }
+}
+
+/// Badge visuel indiquant le type de la leçon.
 class _LessonTypeBadge extends StatelessWidget {
   final String type;
   const _LessonTypeBadge({required this.type});
@@ -710,7 +992,11 @@ class _LessonTypeBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (icon, label, color) = switch (type) {
-      'video' => (Icons.play_circle_outline_rounded, 'Vidéo', AppColors.primary),
+      'video' => (
+      Icons.play_circle_outline_rounded,
+      'Vidéo',
+      AppColors.primary
+      ),
       'article' => (Icons.article_outlined, 'Article', AppColors.secondary),
       'pdf' => (Icons.picture_as_pdf_outlined, 'PDF', AppColors.error),
       'code_demo' => (Icons.code_rounded, 'Code', AppColors.success),
@@ -719,9 +1005,7 @@ class _LessonTypeBadge extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.symmetric(
-        horizontal: AppDimensions.sm,
-        vertical: AppDimensions.xs,
-      ),
+          horizontal: AppDimensions.sm, vertical: AppDimensions.xs),
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(AppDimensions.radiusRound),

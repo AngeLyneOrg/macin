@@ -5,11 +5,11 @@ import 'package:flutter/material.dart';
 /// Toute l'application référence ces constantes — jamais de
 /// couleur codée en dur dans les widgets.
 abstract class AppColors {
-  // ── Primaire (Bleu MACIN - Mis à jour) ────────────────────
-  static const Color primary = Color(0xFF013BFF); // Ta nouvelle couleur de base
-  static const Color primaryLight = Color(0xFF547BFF); // Plus clair pour les états survolés/actifs
-  static const Color primaryDark = Color(0xFF0029B3); // Plus sombre pour le relief
-  static const Color primarySurface = Color(0xFFE6ECFF); // Fond léger (cards/alertes) basé sur le nouveau bleu
+  // ── Primaire (Bleu MACIN) ─────────────────────────────────
+  static const Color primary = Color(0xFF013BFF);
+  static const Color primaryLight = Color(0xFF547BFF);
+  static const Color primaryDark = Color(0xFF0029B3);
+  static const Color primarySurface = Color(0xFFE6ECFF);
 
   // ── Secondaire (Violet — gamification / badges) ──────────
   static const Color secondary = Color(0xFF7C3AED);
@@ -35,9 +35,23 @@ abstract class AppColors {
   static const Color warning = Color(0xFFD97706);
   static const Color warningSurface = Color(0xFFFFFBEB);
 
-  // ── IA / Tutorat (couleur distincte) ─────────────────────
+  // ── Information (bleu cyan — explications, notes) ────────
+  static const Color info = Color(0xFF0EA5E9);
+  static const Color infoSurface = Color(0xFFE0F5FF);
+
+  // ── IA / Tutorat ─────────────────────────────────────────
   static const Color aiPrimary = Color(0xFF0EA5E9);
   static const Color aiSurface = Color(0xFFE0F5FF);
+
+  // ── Code (blocs code leçon / exercice) ───────────────────
+  /// Fond sombre des blocs de code (inspiré Catppuccin Mocha).
+  static const Color codeBackground = Color(0xFF1E1E2E);
+
+  /// Bordure des blocs de code.
+  static const Color codeBorder = Color(0xFF313244);
+
+  /// Couleur du texte dans les blocs de code.
+  static const Color codeText = Color(0xFFCDD6F4);
 
   // ── Neutres (Light mode) ─────────────────────────────────
   static const Color background = Color(0xFFF8FAFF);
@@ -54,7 +68,7 @@ abstract class AppColors {
 
   // ── Raretés des badges ───────────────────────────────────
   static const Color rarityCommon = Color(0xFF64748B);
-  static const Color rarityRare = Color(0xFF2563EB); // Ce bleu reste cohérent avec ton nouveau thème
+  static const Color rarityRare = Color(0xFF2563EB);
   static const Color rarityEpic = Color(0xFF7C3AED);
   static const Color rarityLegendary = Color(0xFFD97706);
 

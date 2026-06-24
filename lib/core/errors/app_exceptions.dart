@@ -21,22 +21,26 @@ class AuthException extends AppException {
 
   factory AuthException.fromFirebase(String code) {
     return switch (code) {
-      'user-not-found' =>
-        const AuthException(message: 'Aucun compte avec cet email.', code: 'user-not-found'),
-      'wrong-password' =>
-        const AuthException(message: 'Mot de passe incorrect.', code: 'wrong-password'),
-      'email-already-in-use' =>
-        const AuthException(message: 'Cet email est déjà utilisé.', code: 'email-already-in-use'),
-      'weak-password' =>
-        const AuthException(message: 'Mot de passe trop faible (6 caractères minimum).', code: 'weak-password'),
-      'invalid-email' =>
-        const AuthException(message: 'Adresse email invalide.', code: 'invalid-email'),
-      'network-request-failed' =>
-        const AuthException(message: 'Pas de connexion internet.', code: 'network-request-failed'),
-      'too-many-requests' =>
-        const AuthException(message: 'Trop de tentatives. Réessayez plus tard.', code: 'too-many-requests'),
-      _ =>
-        AuthException(message: 'Erreur d\'authentification : $code', code: code),
+      'user-not-found' => const AuthException(
+          message: 'Aucun compte avec cet email.', code: 'user-not-found'),
+      'wrong-password' => const AuthException(
+          message: 'Mot de passe incorrect.', code: 'wrong-password'),
+      'email-already-in-use' => const AuthException(
+          message: 'Cet email est déjà utilisé.',
+          code: 'email-already-in-use'),
+      'weak-password' => const AuthException(
+          message: 'Mot de passe trop faible (6 caractères minimum).',
+          code: 'weak-password'),
+      'invalid-email' => const AuthException(
+          message: 'Adresse email invalide.', code: 'invalid-email'),
+      'network-request-failed' => const AuthException(
+          message: 'Pas de connexion internet.',
+          code: 'network-request-failed'),
+      'too-many-requests' => const AuthException(
+          message: 'Trop de tentatives. Réessayez plus tard.',
+          code: 'too-many-requests'),
+      _ => AuthException(
+          message: 'Erreur d\'authentification : $code', code: code),
     };
   }
 }
@@ -67,4 +71,22 @@ class PermissionException extends AppException {
     super.message = 'Vous n\'avez pas les droits pour effectuer cette action.',
     super.code = 'permission-denied',
   });
+}
+
+/// Erreurs liées au service de tutorat IA (MACI / FastAPI).
+///
+/// Lancée par [AiRepository] quand le backend IA est inaccessible,
+/// retourne une erreur HTTP, ou dépasse le timeout configuré.
+class AiException extends AppException {
+  final int? statusCode;
+
+  const AiException({required super.message, super.code, this.statusCode});
+}
+
+/// Erreurs liées au téléchargement et à la gestion du contenu hors-ligne.
+///
+/// Lancée par [OfflineService] lors d'un téléchargement échoué,
+/// d'une annulation, ou d'une opération sur un fichier local invalide.
+class OfflineException extends AppException {
+  const OfflineException({required super.message, super.code});
 }

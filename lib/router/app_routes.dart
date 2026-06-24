@@ -2,7 +2,15 @@
 ///
 /// Toujours utiliser ces constantes pour naviguer :
 ///   context.goNamed(AppRoutes.home)
-///   context.goNamed(AppRoutes.courseDetail, pathParameters: {'id': courseId})
+///   context.goNamed(AppRoutes.lessonPlayer, pathParameters: {
+///     'id': courseId, 'lessonId': lessonId
+///   })
+///   context.goNamed(AppRoutes.exercisePage, pathParameters: {
+///     'id': courseId, 'moduleId': moduleId
+///   })
+///   context.goNamed(AppRoutes.exerciseRunner, pathParameters: {
+///     'id': courseId, 'moduleId': moduleId, 'exerciseId': exerciseId
+///   })
 abstract class AppRoutes {
   // ── Auth ─────────────────────────────────────────────────
   static const String splash = 'splash';
@@ -27,6 +35,15 @@ abstract class AppRoutes {
   static const String lessonPlayer = 'lesson-player';
 
   // ── Exercises ────────────────────────────────────────────
+  /// Liste des exercices d'un module.
+  /// Params: id (courseId), moduleId
+  static const String exercisePage = 'exercise-page';
+
+  /// Lecteur d'un exercice individuel.
+  /// Params: id (courseId), moduleId, exerciseId
+  static const String exerciseRunner = 'exercise-runner';
+
+  // Anciens noms conservés pour rétrocompatibilité
   static const String quiz = 'quiz';
   static const String quizResult = 'quiz-result';
   static const String codeChallenge = 'code-challenge';
@@ -42,8 +59,8 @@ abstract class AppRoutes {
   static const String leaderboard = 'leaderboard';
 
   // ── AI Tutor (MACI) ──────────────────────────────────────
-  static const String aiTutor = 'ai-tutor';      // Dashboard d'analyse IA
-  static const String aiChat = 'ai-chat';        // Chat libre avec MACI
+  static const String aiTutor = 'ai-tutor';
+  static const String aiChat = 'ai-chat';
 
   // ── Wallet & Referral ────────────────────────────────────
   static const String wallet = 'wallet';

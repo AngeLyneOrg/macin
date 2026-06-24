@@ -10,6 +10,8 @@ import 'package:macin/features/auth/presentation/pages/splash_page.dart';
 import 'package:macin/features/auth/presentation/pages/onboarding_page.dart';
 import 'package:macin/features/courses/presentation/pages/catalog_page.dart';
 import 'package:macin/features/courses/presentation/pages/course_detail_page.dart';
+import 'package:macin/features/exercises/presentation/pages/exercise_page.dart';
+import 'package:macin/features/exercises/presentation/pages/exercise_runner_page.dart';
 import 'package:macin/features/home/presentation/pages/home_page.dart';
 import 'package:macin/features/lessons/presentation/pages/lesson_player_page.dart';
 import 'package:macin/features/profile/presentation/pages/profile_page.dart';
@@ -20,105 +22,95 @@ import 'app_routes.dart';
 
 /// Configuration go_router de l'application MACIN.
 ///
-/// Logique de redirection :
-///   - '/' et '/splash' ne sont JAMAIS interceptées par [redirect] —
-///     c'est la SplashPage elle-même qui décide où aller, une fois.
-///     Sinon on entre dans une boucle de redirection avec le check
-///     "isOnAuthPage" ci-dessous.
-///   - Non authentifié + route protégée → /login
-///   - Authentifié + sur /login ou /register → /home
-///   - /onboarding est toujours accessible (page de présentation,
-///     pas une page d'auth) donc jamais redirigée vers /login.
+/// Arborescence des routes leçons / exercices :
+///
+///   /catalog
+///     /:id                        → CourseDetailPage
+///       /lesson/:lessonId         → LessonPlayerPage
+///       /module/:moduleId
+///         /exercises              → ExercisePage
+///           /:exerciseId          → ExerciseRunnerPage
 class AppRouter {
   static final _rootNavigatorKey = GlobalKey<NavigatorState>();
   static final _shellNavigatorKey = GlobalKey<NavigatorState>();
 
-  /// Routes qui ne nécessitent jamais d'authentification et ne
-  /// doivent jamais être interceptées par la redirection.
-  static const _publicRoutes = ['/splash', '/onboarding', '/login', '/register'];
+  static const _publicRoutes = [
+    '/splash',
+    '/onboarding',
+    '/login',
+    '/register'
+  ];
 
   static GoRouter get router => GoRouter(
     navigatorKey: _rootNavigatorKey,
     initialLocation: '/splash',
     debugLogDiagnostics: true,
 
-    // ── Redirection basée sur l'état auth ────────────────
     redirect: (context, state) {
-      final isAuthenticated = FirebaseAuth.instance.currentUser != null;
+      final isAuthenticated =
+          FirebaseAuth.instance.currentUser != null;
       final location = state.matchedLocation;
       final isPublicRoute = _publicRoutes.contains(location);
 
-      // Splash gère sa propre navigation initiale — ne JAMAIS
-      // rediriger automatiquement depuis ou vers cette route ici,
-      // sous peine de boucle avec le redirect de SplashPage.
       if (location == '/splash') return null;
-
-      // Pas authentifié et route protégée → /login
-      if (!isAuthenticated && !isPublicRoute) {
-        return '/login';
-      }
-
-      // Authentifié mais sur /login ou /register → /home
-      // (PAS sur /onboarding : un utilisateur déconnecté doit
-      // pouvoir la revoir sans être bloqué).
+      if (!isAuthenticated && !isPublicRoute) return '/login';
       if (isAuthenticated &&
           (location == '/login' || location == '/register')) {
         return '/home';
       }
-
       return null;
     },
 
     routes: [
-      // ── Splash ─────────────────────────────────────────
+      // ── Splash ───────────────────────────────────────
       GoRoute(
         path: '/splash',
         name: AppRoutes.splash,
-        builder: (context, state) => const SplashPage(),
+        builder: (_, __) => const SplashPage(),
       ),
 
-      // ── Onboarding ─────────────────────────────────────
+      // ── Onboarding ───────────────────────────────────
       GoRoute(
         path: '/onboarding',
         name: AppRoutes.onboarding,
-        builder: (context, state) => const OnboardingPage(),
+        builder: (_, __) => const OnboardingPage(),
       ),
 
-      // ── Auth ───────────────────────────────────────────
+      // ── Auth ─────────────────────────────────────────
       GoRoute(
         path: '/login',
         name: AppRoutes.login,
-        builder: (context, state) => const LoginPage(),
+        builder: (_, __) => const LoginPage(),
       ),
       GoRoute(
         path: '/register',
         name: AppRoutes.register,
-        builder: (context, state) => const RegisterPage(),
+        builder: (_, __) => const RegisterPage(),
       ),
 
-      // ── AI Chat (MACI) — hors du Shell, écran plein sans bottom nav ──
+      // ── AI Chat (MACI) ────────────────────────────────
       GoRoute(
         path: '/ai-chat',
         name: AppRoutes.aiChat,
-        builder: (context, state) => const AiChatPage(),
+        builder: (_, __) => const AiChatPage(),
       ),
 
-      // ── Shell avec BottomNavigationBar ─────────────────
+      // ── Shell avec BottomNavigationBar ────────────────
       ShellRoute(
         navigatorKey: _shellNavigatorKey,
-        builder: (context, state, child) {
-          return MainScaffold(child: child);
-        },
+        builder: (context, state, child) =>
+            MainScaffold(child: child),
         routes: [
           GoRoute(
             path: '/home',
             name: AppRoutes.home,
-            builder: (context, state) => const HomePage(),
+            builder: (_, __) => const HomePage(),
           ),
+
           GoRoute(
             path: '/catalog',
             name: AppRoutes.catalog,
-            builder: (context, state) => const CatalogPage(),
+            builder: (_, __) => const CatalogPage(),
             routes: [
               GoRoute(
                 path: ':id',
@@ -127,6 +119,7 @@ class AppRouter {
                   courseId: state.pathParameters['id']!,
                 ),
                 routes: [
+                  // ── Leçon ──────────────────────────
                   GoRoute(
                     path: 'lesson/:lessonId',
                     name: AppRoutes.lessonPlayer,
@@ -135,30 +128,54 @@ class AppRouter {
                       courseId: state.pathParameters['id']!,
                     ),
                   ),
+
+                  // ── Exercices (liste + runner) ──────
+                  GoRoute(
+                    path: 'module/:moduleId/exercises',
+                    name: AppRoutes.exercisePage,
+                    builder: (context, state) => ExercisePage(
+                      courseId: state.pathParameters['id']!,
+                      moduleId: state.pathParameters['moduleId']!,
+                    ),
+                    routes: [
+                      GoRoute(
+                        path: ':exerciseId',
+                        name: AppRoutes.exerciseRunner,
+                        builder: (context, state) =>
+                            ExerciseRunnerPage(
+                              courseId: state.pathParameters['id']!,
+                              moduleId:
+                              state.pathParameters['moduleId']!,
+                              exerciseId:
+                              state.pathParameters['exerciseId']!,
+                            ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ],
           ),
+
           GoRoute(
             path: '/profile',
             name: AppRoutes.profile,
-            builder: (context, state) => const ProfilePage(),
+            builder: (_, __) => const ProfilePage(),
           ),
           GoRoute(
             path: '/wallet',
             name: AppRoutes.wallet,
-            builder: (context, state) => const WalletPage(),
+            builder: (_, __) => const WalletPage(),
           ),
           GoRoute(
             path: '/ai-tutor',
             name: AppRoutes.aiTutor,
-            builder: (context, state) => const AiDashboardPage(),
+            builder: (_, __) => const AiDashboardPage(),
           ),
         ],
       ),
     ],
 
-    // ── Page d'erreur ────────────────────────────────────
     errorBuilder: (context, state) => Scaffold(
       body: Center(
         child: Column(
